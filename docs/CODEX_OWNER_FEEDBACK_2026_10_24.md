@@ -1,6 +1,6 @@
 # Memora owner feedback — 24 October 2026
 
-Status: APPROVED; implementation, local core/app/server checks and the final three targeted native UI regressions pass. Final exact-source CI, optimized runtime and private code5 Desktop delivery remain pending. Current evidence and exact next action live in root `CODEX_WORKLOG.md`. This canonical addendum supersedes conflicting V1.0.1 behavior; the earlier master remains immutable.
+Status: PRIVATE CODE5 DELIVERED. Exact source `5553437584018bf012bc4f1ff16444229237df57` passed all five jobs in CI 40289875511; downloaded debug and optimized suites each recorded 79 pass, 0 fail/error and 1 explicit native-auth opt-in skip. The permanent-signed ARM64 candidate was independently verified and copied to `C:/Users/Administrator/Desktop/Memora-v1.0.2-code5-arm64-private.apk` with SHA-256 `78CCD93FC26EAC9A648012C359E71AFCD4BB2A6AB30396BF0A6A402197EBAD1F`. Owner physical/manual/live-provider acceptance remains pending. Current evidence and limits live in root `CODEX_WORKLOG.md`. This canonical addendum supersedes conflicting V1.0.1 behavior; the earlier master remains immutable.
 
 ## Original owner request
 
