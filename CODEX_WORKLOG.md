@@ -1,4 +1,22 @@
-# Memora owner feedback implementation — 25 October 2026
+# Memora checkpoint — 27 October 2026
+
+## Current task: execute revised 42-finding remediation — Phase 1 verified, Phase 2 next
+
+Owner explicitly authorized updating the reviewed plan, moving it into the project and starting execution. Canonical revised plan: [Memora_42_Finding_Remediation_Plan.md](docs/Memora_42_Finding_Remediation_Plan.md); byte-identical imported audit: [Memora_Debug_Audit.md](docs/Memora_Debug_Audit.md). Downloads originals are preserved. Completed review and rationale: [CODEX_REMEDIATION_REVIEW_2026_10_27.md](docs/CODEX_REMEDIATION_REVIEW_2026_10_27.md). Use this root worklog as the only progress ledger; do not restart planning or request another routine execution approval.
+
+Required amendments: scope-safe retained results and AI currentness; explicit sort/pagination/selection/substring behavior with FTS4-compatible ranking; staged/recoverable restore plus durable pending indexing; GIF legacy backup decoding and items/assets/rendering normalization; preserve QA011 immediate-lock protection; recognize existing voice retry and add capability-aware fallback; correct adaptive-icon sizing; backend has no existing durable store and configured revocations already survive restart; narrow initial benchmarks and defer speculative refactor/export scope.
+
+Current checkout: existing `codex/v1.0.1-final-qa`, HEAD `314c2e9a16d038537f33762d3413fd2911efdb0a`, one worktree. Prior review left this worklog modified and review note untracked; unrelated `classes.jar` and `docs/qa/` remain untouched. Reuse checkout; no competing worktree/ledger. Previous code5 evidence below is historical. No finding is closed. No signing, main merge, release, deployment, paid providers or physical-phone operations are authorized by this implementation request.
+
+Phase 1 contract: opt-in test-only synthetic Room/repository baseline for 1k/10k/50k rows, hit/no-hit/broad/scoped queries, SQL/fallback counts and deterministic typing/debounce characterization. Use actual Room callback/repository, no parallel search implementation/new dependencies. Capture first/warm percentiles with environment/source metadata under ignored `artifacts/remediation-20261027/`; JVM timings never establish device acceptance. Broader import/PDF/backup benchmarks grow at their owning phases. Native phase execution guidance adapted to the existing approved plan/root ledger; no skill-created competing planning system.
+
+Phase 1 observed-green checkpoint (27 October): real in-memory Room/API34 repository baseline plus LatestLocalSearch and FTS regression tests pass (`artifacts/remediation-20261027/phase1-final.log`, BUILD SUCCESSFUL 3m18s). Full 1k/10k/50k first/warm p50/p95/p99 and SQL counts are in `search-baseline.csv` alongside that log. Fixtures include large synthetic OCR bodies, kind/folder/date checks and post-PDF-update FTS integrity. Existing rapid typing is characterized explicitly: 20 invalidations, one debounced query. Added no dependencies or production behavior. Gradle requires escalation to see/use the existing cache; sandbox-only offline resolution reported AGP unavailable, resolved by using the same command with cache access. JDK21/repo SDK/socket settings retained.
+
+Pre-flight interfaces: Phase 2 displayed/request scope and AI identity feed Phase 3 SQL/paging/loaded selection; Phase 3 schema feeds Phase 7 taxonomy and Phase 9 vectors (number migrations from actual schema); Phase 4 durable pending indexing feeds Phase 5 staged restore; Phase 6 speech/native handoffs and Phase 8 lifecycle must preserve QA011. Ruling: reuse this approved plan, QA checkout and single root ledger rather than skill scratch ledgers/worktrees; maintain phase order and commit observed-green checkpoints only.
+
+**Exact next action:** checkpoint Phase 1 with explicit files, then Phase 2 behavioral RED tests for compatible retained results and unrelated Room emissions during/after Ask AI. Keep request freshness/selection separate from display continuity; clear incompatible scope and remove newly unavailable items immediately. Compact actual Library controls, remove dead SearchScreen and migrate its tests to Library. One heavy Gradle process at a time; preserve unrelated files and prior artifacts. No CI/signing/public operations.
+
+## Previous task: owner feedback implementation — 25–26 October 2026
 
 ## COMPLETE: private code5 Desktop candidate delivered
 

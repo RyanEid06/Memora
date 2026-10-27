@@ -104,6 +104,26 @@ class LatestLocalSearchTest {
         assertEquals(2, queries.size)
     }
 
+    /** Pre-remediation characterization; immediate invalidation is measured, not endorsed. */
+    @Test fun twentyKeystrokesInvalidateImmediatelyButExecuteOneDebouncedQuery() = runTest {
+        val queries = mutableListOf<String>()
+        var invalidations = 0
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val runner = LatestLocalSearch(backgroundScope, { queries += it; emptyList() },
+            { invalidations++ }, {}, {}, dispatcher, dispatcher)
+        val text = "abcdefghijklmnopqrst"
+        repeat(20) { index ->
+            runner.refresh(LocalSearchContext(query = text.take(index + 1)), debounceQuery = true)
+            runCurrent()
+            advanceTimeBy(25)
+        }
+        assertEquals(20, invalidations)
+        assertTrue(queries.isEmpty())
+        advanceTimeBy(150)
+        runCurrent()
+        assertEquals(listOf(text), queries)
+    }
+
     @Test fun failedLocalQueryHasDistinctErrorAndNextQueryRecovers() = runTest {
         var failed = false
         var ready = false

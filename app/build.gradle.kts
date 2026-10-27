@@ -28,6 +28,15 @@ val releaseKeyPassword = providers.environmentVariable("RELEASE_KEY_PASSWORD").o
 val phoneApks = providers.gradleProperty("memoraPhoneApks").map { it.toBoolean() }.getOrElse(false)
 val optimizedTests = providers.gradleProperty("memoraOptimizedTests").map { it.toBoolean() }.getOrElse(false)
 
+// Large synthetic fixtures stay opt-in and never run as part of ordinary unit verification.
+tasks.withType<Test>().configureEach {
+    systemProperty("memora.performanceBaseline", providers.gradleProperty("memoraPerformanceBaseline").getOrElse("false"))
+    systemProperty("memora.performanceBaselineOutput", rootProject.layout.projectDirectory.file(
+        "artifacts/remediation-20261027/search-baseline.csv"
+    ).asFile.absolutePath)
+    systemProperty("memora.performanceBaselineSource", providers.gradleProperty("memoraBaselineSource").getOrElse("unrecorded"))
+}
+
 abstract class VerifyMemoraReleaseSigning : DefaultTask() {
     @TaskAction
     fun verifyIdentity() {
