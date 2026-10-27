@@ -204,6 +204,7 @@ class NavigationHierarchyTest {
                 }
             }
         }
+        compose.onNodeWithTag("filters_sort_button").performScrollTo().performClick()
         compose.onNodeWithTag("sort_order_button").performScrollTo().assertIsDisplayed().assertHasClickAction()
         compose.onNodeWithTag("clear_filters_button").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithTag("settings_top_button").performClick()
@@ -228,6 +229,8 @@ class NavigationHierarchyTest {
         }
         // A pending transient confirmation can cover this deliberately tiny viewport.
         compose.waitUntil(15_000) { vm.captureState.value.message == null && !vm.captureState.value.saving }
+        scrollLibraryTo("library_list", hasTestTag("filters_sort_button"))
+        clickLibraryTarget("library_list", hasTestTag("filters_sort_button"))
         for (layout in listOf(LibraryLayout.LIST, LibraryLayout.GRID)) {
             compose.runOnUiThread { vm.setLibraryLayout(layout); vm.selectKind(ItemKind.TEXT) }
             compose.waitUntil(10_000) { vm.resultsReady.value && vm.localSearchResults.value.singleOrNull()?.item?.id == id }

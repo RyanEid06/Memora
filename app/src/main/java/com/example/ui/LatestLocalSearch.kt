@@ -14,6 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -33,12 +35,29 @@ internal data class LocalSearchContext(
     val customStart: Long? = null,
     val customEnd: Long? = null,
     val grouping: DateGrouping = DateGrouping.NONE
-)
+) {
+    fun hasSameScope(other: LocalSearchContext): Boolean =
+        kind == other.kind && collectionId == other.collectionId && dateFilter == other.dateFilter &&
+            basis == other.basis && customStart == other.customStart && customEnd == other.customEnd
+}
 
 internal data class LocalSearchResult(
     val items: List<ItemWithCollections>,
     val sections: List<GroupedLibrarySection>
 )
+
+/** Display continuity never implies that selection or a request is current. */
+internal data class LocalSearchState(
+    val result: LocalSearchResult? = null,
+    val displayedQuery: String = "",
+    val queryPending: Boolean = false,
+    val searchInFlight: Boolean = true,
+    val showProgress: Boolean = false,
+    val searchError: Boolean = false
+) {
+    val hasPreviousResults: Boolean get() = result != null
+    val initialLoad: Boolean get() = result == null && (queryPending || searchInFlight)
+}
 
 /** Cancellation reduces wasted work; the generation check also rejects non-cooperative work. */
 internal class LatestLocalSearch(
@@ -48,35 +67,73 @@ internal class LatestLocalSearch(
     private val onResult: (LocalSearchResult) -> Unit,
     private val onError: () -> Unit,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val publicationDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+    private val publicationDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val onPending: () -> Unit = {},
+    private val onRetained: (LocalSearchResult) -> Unit = onResult
 ) {
     private val generation = AtomicLong()
     private var job: Job? = null
     val currentGeneration: Long get() = generation.get()
+    private val _state = MutableStateFlow(LocalSearchState())
+    val state = _state.asStateFlow()
+    private var displayedContext: LocalSearchContext? = null
+    private var lastSourceItems: List<ItemWithCollections>? = null
 
     // Called by the ViewModel's Main-thread setters and Room collectors. Publication uses the
     // same dispatcher, so checking the generation and changing visible state cannot interleave.
     @MainThread
-    fun refresh(context: LocalSearchContext, debounceQuery: Boolean = false) {
+    fun refresh(context: LocalSearchContext, debounceQuery: Boolean = false, sourceRefresh: Boolean = false) {
         val capturedGeneration = generation.incrementAndGet()
-        // Invalidate synchronously, before the debounce or any repository/file-system suspension.
-        onInvalidated()
+        val previous = _state.value
+        var retained = previous.result.takeIf { displayedContext?.hasSameScope(context) == true }
+        // Room has already supplied the authoritative active rows. Remove deleted/moved rows
+        // synchronously, before debounce, even while retaining the other displayed matches.
+        if (retained != null && lastSourceItems != null && lastSourceItems !== context.sourceItems) {
+            val wanted = retained.items.mapTo(HashSet()) { it.item.id }
+            val current = context.sourceItems.filter { it.item.id in wanted }
+            retained = projectLocalSearch(current, requireNotNull(displayedContext))
+        }
+        lastSourceItems = context.sourceItems
+        val pending = debounceQuery && context.query.isNotBlank()
+        _state.value = LocalSearchState(retained,
+            if (retained == null) context.query else previous.displayedQuery,
+            queryPending = pending, searchInFlight = !pending)
+        if (retained == null) onInvalidated()
+        else if (retained != previous.result) onRetained(retained)
+        onPending()
         job?.cancel()
         job = scope.launch(workerDispatcher) {
+            val progress = launch {
+                delay(275)
+                withContext(publicationDispatcher) {
+                    if (capturedGeneration == generation.get()) _state.value = _state.value.copy(showProgress = true)
+                }
+            }
             try {
-                if (debounceQuery && context.query.isNotBlank()) delay(150)
+                if (pending) delay(150) else if (sourceRefresh) delay(75)
+                withContext(publicationDispatcher) {
+                    if (capturedGeneration == generation.get())
+                        _state.value = _state.value.copy(queryPending = false, searchInFlight = true)
+                }
                 val rows = if (context.query.isBlank()) context.sourceItems else search(context.query)
                 val result = projectLocalSearch(rows, context)
                 withContext(publicationDispatcher) {
-                    if (capturedGeneration == generation.get()) onResult(result)
+                    if (capturedGeneration == generation.get()) {
+                        displayedContext = context.copy(sourceItems = emptyList())
+                        _state.value = LocalSearchState(result, context.query, searchInFlight = false)
+                        onResult(result)
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
                 withContext(publicationDispatcher) {
-                    if (capturedGeneration == generation.get()) onError()
+                    if (capturedGeneration == generation.get()) {
+                        _state.value = _state.value.copy(queryPending = false, searchInFlight = false, showProgress = false, searchError = true)
+                        onError()
+                    }
                 }
-            }
+            } finally { progress.cancel() }
         }
     }
 }

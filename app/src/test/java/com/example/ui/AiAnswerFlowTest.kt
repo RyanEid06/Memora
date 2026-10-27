@@ -28,7 +28,7 @@ import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, androidx.room.ExperimentalRoomApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = PersonalLibraryApp::class)
 class AiAnswerFlowTest {
@@ -48,14 +48,30 @@ class AiAnswerFlowTest {
 
     @Before fun setup() = runBlocking {
         app = ApplicationProvider.getApplicationContext()
+        val invalidation = org.robolectric.Robolectric.buildService(androidx.room.MultiInstanceInvalidationService::class.java).create()
+        val binding = android.content.Intent(app, androidx.room.MultiInstanceInvalidationService::class.java)
+        org.robolectric.Shadows.shadowOf(app).setComponentNameAndServiceForBindServiceForIntent(
+            binding, checkNotNull(binding.component), checkNotNull(invalidation.get().onBind(binding)))
         prefs.edit().clear().putBoolean("ai_paused", true).commit()
         app.getSharedPreferences("device_identity_prefs", 0).edit().clear().commit()
         setAiTestNetwork(app, unmetered = true)
         WorkManagerTestInitHelper.initializeTestWorkManager(app,
             Configuration.Builder().setExecutor(SynchronousExecutor()).build())
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+        val mainDispatcher = UnconfinedTestDispatcher()
+        Dispatchers.setMain(mainDispatcher)
         store = ViewModelStore()
         vm = ViewModelProvider(store, ViewModelProvider.AndroidViewModelFactory(app))[MainViewModel::class.java]
+        // Match the existing membership fixture: legacy SQLite startup maintenance must
+        // finish before synthetic writes and the interactive transaction compete for it.
+        withTimeout(5_000) {
+            while (androidx.work.WorkManager.getInstance(app).getWorkInfosForUniqueWork("local_index_pending").get().let {
+                it.isEmpty() || it.any { work -> !work.state.isFinished }
+            }) {
+                mainDispatcher.scheduler.runCurrent()
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+                delay(10)
+            }
+        }
         val vector = List(768) { if (it == 0) "1.0" else "0.0" }.joinToString(",")
         vm.repository.dao.insertItem(ItemEntity("local-source", "Sarah birthday", "August 19", "DOCUMENT",
             extractedText = "Sarah birthday August 19", localIndexVersion = 5, localIndexCoverage = "COMPLETE"))
@@ -90,6 +106,7 @@ class AiAnswerFlowTest {
     @After fun close() {
         release.countDown()
         store.clear()
+        androidx.work.WorkManager.getInstance(app).cancelAllWork().result.get()
         server.stop(0)
         Dispatchers.resetMain()
         for (name in listOf("personal_library_settings", "device_identity_prefs", "ai_gateway_prefs")) {
@@ -174,6 +191,51 @@ class AiAnswerFlowTest {
             await { !vm.isAiSearching.value }
             assertEquals("ANSWERED", requireNotNull(vm.aiAnswer.value).response.status)
         } finally { release.countDown() }
+    }
+
+    @Test fun unrelatedRoomInsertDoesNotCancelAnInFlightAnswer() = runBlocking {
+        val entered = CountDownLatch(1)
+        val originalHandler = answerHandler
+        answerHandler = { body -> entered.countDown(); release.await(10, TimeUnit.SECONDS); originalHandler(body) }
+        vm.setSearchQuery("birthday")
+        await { vm.resultsReady.value }
+        vm.triggerAiSearch("birthday")
+        try {
+            assertTrue(entered.await(10, TimeUnit.SECONDS))
+            vm.repository.dao.insertItem(ItemEntity("unrelated", "Unrelated", "Synthetic new note", "TEXT"))
+            await { vm.items.value.any { it.item.id == "unrelated" } && vm.resultsReady.value }
+            release.countDown()
+            await { !vm.isAiSearching.value }
+            assertEquals("ANSWERED", vm.aiAnswer.value?.response?.status)
+        } finally { release.countDown() }
+    }
+
+    @Test fun changingQueryClearsStaleSelectionBeforeReplacement() = runBlocking {
+        vm.setSearchQuery("birthday")
+        await { vm.resultsReady.value }
+        vm.toggleSelection("local-source")
+        assertEquals(setOf("local-source"), vm.selectedItemIds.value)
+        vm.setSearchQuery("nonexistentquestionword")
+        assertFalse(vm.resultsReady.value)
+        assertTrue(vm.selectedItemIds.value.isEmpty())
+        assertFalse(vm.isBatchMode.value)
+        vm.batchMoveToTrash()
+        await { vm.resultsReady.value }
+        assertFalse(requireNotNull(vm.repository.dao.getItemById("local-source")).isTrash)
+    }
+
+    @Test fun unrelatedRoomChangeKeepsCompletedAnswerButSourceEditClearsIt() = runBlocking {
+        ask()
+        assertNotNull("AI error=${vm.aiSearchError.value}; request paths=${requests.map { it.first }}; " +
+            "failure classes=${org.robolectric.shadows.ShadowLog.getLogsForTag("MemoraSearch").map { it.msg }}", vm.aiAnswer.value)
+        vm.repository.dao.insertItem(ItemEntity("unrelated", "Unrelated", "Synthetic new note", "TEXT"))
+        await { vm.items.value.any { it.item.id == "unrelated" } && vm.resultsReady.value }
+        assertEquals("ANSWERED", vm.aiAnswer.value?.response?.status)
+        val source = requireNotNull(vm.repository.dao.getItemById("local-source"))
+        vm.repository.dao.updateItem(source.copy(content = "Changed source", localIndexVersion = source.localIndexVersion + 1))
+        await { vm.items.value.any { it.item.id == "local-source" && it.item.content == "Changed source" } && vm.aiAnswer.value == null }
+        assertNull(vm.aiAnswer.value)
+        assertTrue(vm.aiSearchResults.value.isEmpty())
     }
 
     private suspend fun await(condition: () -> Boolean) = withTimeout(15_000) { while (!condition()) delay(10) }

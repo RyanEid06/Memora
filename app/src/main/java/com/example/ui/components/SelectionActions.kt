@@ -29,7 +29,7 @@ fun SelectionActions(viewModel: MainViewModel, visibleCount: Int, visibleIds: ()
     var actionItemIds by remember { mutableStateOf(emptySet<String>()) }
     IconButton(
         onClick = viewModel::batchMoveToTrash,
-        enabled = selectedIds.isNotEmpty() && !selectingVisible,
+        enabled = resultsReady && selectedIds.isNotEmpty() && !selectingVisible,
         modifier = Modifier.testTag("batch_delete_button")
     ) { Icon(Icons.Default.Delete, "Trash selected", tint = MaterialTheme.colorScheme.error) }
     Box {
@@ -46,7 +46,7 @@ fun SelectionActions(viewModel: MainViewModel, visibleCount: Int, visibleIds: ()
             for (add in listOf(true, false)) {
                 DropdownMenuItem(
                     text = { Text(if (add) "Move to folder" else "Remove from folders") },
-                    enabled = selectedIds.isNotEmpty(),
+                    enabled = resultsReady && selectedIds.isNotEmpty() && !selectingVisible,
                     onClick = {
                         actionItemIds = selectedIds.toSet()
                         collectionAction = add

@@ -1,6 +1,6 @@
 # Memora — 42-Finding Remediation Plan
 
-**Status:** OWNER AUTHORIZED — PHASE 1 VERIFIED; PHASE 2 NEXT (27 October 2026)  
+**Status:** OWNER AUTHORIZED — PHASES 1–2 VERIFIED LOCALLY; PHASE 3 NEXT (27 October 2026)
 **Source:** historical audit ZIP has no commit/hash; current execution baseline is `314c2e9a16d038537f33762d3413fd2911efdb0a` on `codex/v1.0.1-final-qa`.  
 **Base audit:** [Memora_Debug_Audit.md](Memora_Debug_Audit.md), preserved byte-for-byte.
 **Review and amendments:** [CODEX_REMEDIATION_REVIEW_2026_10_27.md](CODEX_REMEDIATION_REVIEW_2026_10_27.md).
@@ -579,7 +579,7 @@ Search/state/query/indexing come first because they are the biggest user-visible
 - [x] Owner authorizes updating, importing and executing this revised plan (27 October 2026).
 - [x] Preserve original audit under docs and link this plan to the single root worklog.
 - [x] Phase 1: opt-in real Room/repository harness verified for 1k/10k/50k; first/warm percentiles and SQL counts captured in `artifacts/remediation-20261027/search-baseline.csv`. Twenty 25ms-spaced keystrokes invalidate 20 times but execute one query after 150ms debounce. Focused tests and FTS integrity pass; host evidence only.
-- [ ] Phase 2: failing behavior tests first; preserve compatible results with immutable displayed/request scope, then decouple unrelated refresh from AI request identity while retaining safety checks; integrate compact accessible controls.
+- [x] Phase 2: retained-result, selection and AI regressions verified; 259 app JVM tests pass (one opt-in benchmark skip), lint/debug assemblies pass and eight focused native UI tests pass on the hash-verified new debug APK. Evidence: root worklog and `artifacts/remediation-20261027/phase2-*`. Physical acceptance remains separate.
 - [ ] Phase 3: define SQL/search/paging contracts above, test filtered/no-hit/broad queries and loaded-page actions; implement before schema changes are accepted.
 - [ ] Phases 4–11: execute in order with the amended safety and compatibility contracts; record exact files, failing/passing checks and rulings in root worklog at each milestone.
 - [ ] Phase 12: complete integrated automated gates and separately list pending physical/live acceptance.

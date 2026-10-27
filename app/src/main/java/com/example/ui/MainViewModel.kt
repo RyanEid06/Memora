@@ -128,6 +128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val localSearchError: StateFlow<String?> = _localSearchError.asStateFlow()
     private val _resultsReady = MutableStateFlow(false)
     val resultsReady = _resultsReady.asStateFlow()
+    private var requestedSearchContext: LocalSearchContext? = null
     private val _selectingVisible = MutableStateFlow(false)
     val selectingVisible = _selectingVisible.asStateFlow()
 
@@ -147,6 +148,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAiSearching = MutableStateFlow(false)
     private var aiSearchJob: Job? = null
     private val aiSearchGeneration = AtomicLong()
+    private var aiRequestContext: LocalSearchContext? = null
+    private var aiSnapshot: InteractiveAiSnapshot? = null
     val isAiSearching: StateFlow<Boolean> = _isAiSearching.asStateFlow()
 
     private val _incomingShare = MutableStateFlow<SharePayload?>(null)
@@ -176,17 +179,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         scope = viewModelScope,
         search = repository::searchWithCollections,
         onInvalidated = {
-            _resultsReady.value = false
-            _localSearchError.value = null
-            invalidateAiSearch()
+            _localSearchResults.value = emptyList()
+            _groupedSections.value = emptyList()
         },
         onResult = { result ->
             _localSearchResults.value = result.items
             _groupedSections.value = result.sections
+            if (_selectedItemIds.value.isNotEmpty()) {
+                val visible = result.items.mapTo(HashSet()) { it.item.id }
+                _selectedItemIds.value = _selectedItemIds.value.intersect(visible)
+            }
             _resultsReady.value = true
         },
-        onError = { _localSearchError.value = "Could not search your library. Try again." }
+        onError = { _localSearchError.value = "Could not search your library. Try again." },
+        onPending = {
+            _resultsReady.value = false
+            _localSearchError.value = null
+        },
+        onRetained = {
+            _localSearchResults.value = it.items
+            _groupedSections.value = it.sections
+        }
     )
+    internal val localSearchState = localSearch.state
 
     init {
         prefs.registerOnSharedPreferenceChangeListener(aiPreferenceListener)
@@ -203,8 +218,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Observe active items from Room
         viewModelScope.launch {
             repository.observeActiveItemsWithCollections().collect {
+                aiSnapshot?.let { snapshot ->
+                    val expected = snapshot.items.associateBy { row -> row.item.id }
+                    if (it.count { row -> expected[row.item.id] == row } != expected.size) {
+                        val request = aiSearchGeneration.get()
+                        // A queued Room emission can predate the AI snapshot. Revalidate
+                        // against current SQL state instead of cancelling from that old hint.
+                        viewModelScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    interactiveAiRetrieval.requireCurrent(snapshot) { request == aiSearchGeneration.get() }
+                                }
+                            } catch (_: AiGatewayException.RequestBlockedException) {
+                                if (request == aiSearchGeneration.get()) invalidateAiSearch()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                if (request == aiSearchGeneration.get()) invalidateAiSearch()
+                            }
+                        }
+                    }
+                }
                 _items.value = it
-                refreshFilteredResults()
+                refreshFilteredResults(sourceRefresh = true)
                 viewModelScope.launch { updateStorageStats() }
             }
         }
@@ -258,6 +294,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun invalidateAiSearch() {
         aiSearchGeneration.incrementAndGet()
         aiSearchJob?.cancel()
+        aiRequestContext = null
+        aiSnapshot = null
         _isAiSearching.value = false
         _aiSearchResults.value = emptyList()
         _aiSearchError.value = null
@@ -265,8 +303,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     @MainThread
-    private fun refreshFilteredResults(debounceQuery: Boolean = false) {
-        localSearch.refresh(captureLocalSearchContext(), debounceQuery)
+    private fun refreshFilteredResults(debounceQuery: Boolean = false, sourceRefresh: Boolean = false) {
+        val context = captureLocalSearchContext()
+        requestedSearchContext?.let {
+            if (it.query != context.query || !it.hasSameScope(context)) clearSelection()
+        }
+        requestedSearchContext = context.copy(sourceItems = emptyList())
+        aiRequestContext?.let {
+            if (it.query != context.query || !it.hasSameScope(context)) invalidateAiSearch()
+        }
+        localSearch.refresh(context, debounceQuery, sourceRefresh)
     }
 
     fun buildMatchSnippet(item: ItemEntity, query: String): String? = buildLocalMatchSnippet(item, query)
@@ -430,9 +476,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (query.isBlank() || query.trim() != _searchQuery.value.trim()) return
         aiSearchJob?.cancel()
         val requestGeneration = aiSearchGeneration.incrementAndGet()
-        val contextGeneration = localSearch.currentGeneration
         // AI retrieval queries Room directly, rather than scanning the observed library snapshot.
         val context = captureLocalSearchContext().copy(sourceItems = emptyList())
+        aiRequestContext = context
+        aiSnapshot = null
         _aiSearchResults.value = emptyList()
         _aiSearchError.value = null
         _aiAnswer.value = null
@@ -442,8 +489,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _isAiSearching.value = true
-        fun isCurrentRequest() = requestGeneration == aiSearchGeneration.get() &&
-            contextGeneration == localSearch.currentGeneration
+        fun isCurrentRequest() = requestGeneration == aiSearchGeneration.get()
         aiSearchJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 aiNetworkPolicy.requireAllowed()
@@ -457,6 +503,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val plan = aiGateway.getSearchPlan(query, emptyList(), beforeRequest = beforePlan)
                 val snapshot = interactiveAiRetrieval.load(context, plan.concepts, privacy)
+                withContext(Dispatchers.Main.immediate) {
+                    interactiveAiRetrieval.requireCurrent(snapshot, ::isCurrentRequest)
+                    aiSnapshot = snapshot
+                }
                 val beforeRequest: suspend () -> Unit = {
                     ensureActive()
                     interactiveAiRetrieval.requireCurrent(snapshot, ::isCurrentRequest)
@@ -580,6 +630,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
+                android.util.Log.w("MemoraSearch", "interactive_search_failed ${failure.javaClass.simpleName}")
                 withContext(Dispatchers.Main.immediate) {
                     if (isCurrentRequest()) {
                         _aiAnswer.value = null
@@ -906,6 +957,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun batchMoveToTrash() {
+        if (!_resultsReady.value || _selectingVisible.value) return
         val ids = _selectedItemIds.value
         viewModelScope.launch(Dispatchers.IO) {
             try {

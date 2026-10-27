@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -62,6 +63,7 @@ fun LibraryScreen(
     val items by viewModel.localSearchResults.collectAsState()
     val allItems by viewModel.items.collectAsState()
     val resultsReady by viewModel.resultsReady.collectAsState()
+    val searchState by viewModel.localSearchState.collectAsState()
     val localSearchError by viewModel.localSearchError.collectAsState()
     val customStart by viewModel.customDateStart.collectAsState()
     val customEnd by viewModel.customDateEnd.collectAsState()
@@ -95,6 +97,7 @@ fun LibraryScreen(
     var showDateFilterMenu by remember { mutableStateOf(false) }
     var showGroupingMenu by remember { mutableStateOf(false) }
     var showCustomRangeDialog by remember { mutableStateOf(false) }
+    var filtersExpanded by rememberSaveable(collectionScope) { mutableStateOf(false) }
 
     if (showCustomRangeDialog) {
         val rangeState = rememberDateRangePickerState()
@@ -205,8 +208,17 @@ fun LibraryScreen(
                         },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                    Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { viewModel.triggerAiSearch(searchQuery) },
+                                        enabled = searchQuery.isNotBlank() && !isAiSearching,
+                                        modifier = Modifier.testTag("ask_ai_search_button")) {
+                                        if (isAiSearching) CircularProgressIndicator(
+                                            Modifier.size(20.dp).semantics { contentDescription = "AI search in progress" }, strokeWidth = 2.dp)
+                                        else Icon(Icons.Filled.AutoAwesome, contentDescription = "Ask AI")
+                                    }
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                                    }
                                 }
                             } else {
                                 IconButton(
@@ -228,27 +240,28 @@ fun LibraryScreen(
             {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (collectionScope == "computed_unfiled") Text("Items without a folder appear here.", style = MaterialTheme.typography.bodySmall)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = { viewModel.triggerAiSearch(searchQuery) }, enabled = searchQuery.isNotBlank() && !isAiSearching, modifier = Modifier.testTag("ask_ai_search_button")) {
-                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Ask AI", maxLines = 1)
-                        }
-                    }
-                    if (isAiSearching) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text("Looking through your saved items…", style = MaterialTheme.typography.bodyMedium)
+                    if (searchState.showProgress && searchState.hasPreviousResults)
+                        LinearProgressIndicator(Modifier.fillMaxWidth().testTag("local_search_updating"))
+                    if (searchState.hasPreviousResults) localSearchError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("local_search_error"))
                     }
                     aiError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("ai_search_error")) }
                     aiAnswer?.let { AiAnswerCard(it, onOpenItemDetail) }
                 }
             },
             {
-                // Type filter strip
-                TypeFilterChipStrip(
-                    selectedKind = selectedKind,
-                    onKindSelected = { viewModel.selectKind(it) }
-                )
+                Column {
+                    TextButton(onClick = { filtersExpanded = !filtersExpanded },
+                        modifier = Modifier.padding(horizontal = 6.dp).testTag("filters_sort_button")) {
+                        Icon(Icons.Filled.FilterList, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (filtersExpanded) "Hide filters / sort" else "Filters / Sort")
+                    }
+                    if (filtersExpanded) TypeFilterChipStrip(
+                        selectedKind = selectedKind,
+                        onKindSelected = { viewModel.selectKind(it) }
+                    )
+                }
             },
             {
                 ActiveSearchFilters(
@@ -262,7 +275,7 @@ fun LibraryScreen(
             },
             {
                 // Scroll controls as a unit so long labels and large text do not clip.
-                Row(
+                if (filtersExpanded) Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -370,7 +383,8 @@ fun LibraryScreen(
                 }
             }
         )
-        val showResultState = !resultsReady || localSearchError != null || (items.isEmpty() && !isAiSearching && aiAnswer == null)
+        val showResultState = (!searchState.hasPreviousResults && (searchState.showProgress || localSearchError != null)) ||
+            (resultsReady && items.isEmpty() && !isAiSearching && aiAnswer == null)
         val resultState: @Composable () -> Unit = {
             Box(Modifier.fillMaxWidth().heightIn(min = 160.dp).padding(16.dp), contentAlignment = Alignment.Center) {
                 LibraryResultState(
@@ -420,7 +434,7 @@ fun LibraryScreen(
                             isSelectMode = isBatchMode,
                             isSelected = itemWithCols.item.id in selectedItemIds,
                             onSelectToggle = { viewModel.toggleSelection(itemWithCols.item.id) },
-                            matchingSnippet = viewModel.buildMatchSnippet(itemWithCols.item, searchQuery)
+                            matchingSnippet = viewModel.buildMatchSnippet(itemWithCols.item, searchState.displayedQuery)
                         )
                     }
                 }
@@ -458,8 +472,8 @@ fun LibraryScreen(
                         }
                     }
                     items(section.items, key = { it.item.id }) { itemWithCols ->
-                        val snippet = remember(itemWithCols.item, searchQuery) {
-                            viewModel.buildMatchSnippet(itemWithCols.item, searchQuery)
+                        val snippet = remember(itemWithCols.item, searchState.displayedQuery) {
+                            viewModel.buildMatchSnippet(itemWithCols.item, searchState.displayedQuery)
                         }
                         ItemCard(
                             itemWithCols = itemWithCols,

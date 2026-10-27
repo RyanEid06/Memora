@@ -154,6 +154,110 @@ class LatestLocalSearchTest {
         assertEquals("offline", publications.single().items.single().item.id)
     }
 
+    @Test fun compatibleResultsRemainVisibleThroughTwentyKeystrokesAndReplacementFailure() = runTest {
+        var visible = emptyList<ItemWithCollections>()
+        var failures = 0
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val runner = LatestLocalSearch(backgroundScope, { error("Synthetic search failure") },
+            { visible = emptyList() }, { visible = it.items }, { failures++ }, dispatcher, dispatcher)
+        val source = listOf(row("retained"))
+        runner.refresh(LocalSearchContext(sourceItems = source))
+        runCurrent()
+        val text = "abcdefghijklmnopqrst"
+        repeat(20) { index ->
+            runner.refresh(LocalSearchContext(query = text.take(index + 1), sourceItems = source), debounceQuery = true)
+            runCurrent()
+            advanceTimeBy(25)
+            assertEquals(listOf("retained"), visible.map { it.item.id })
+            assertTrue(runner.state.value.queryPending)
+            assertFalse(runner.state.value.initialLoad)
+            assertFalse(runner.state.value.showProgress)
+        }
+        advanceTimeBy(150)
+        runCurrent()
+        assertEquals(1, failures)
+        assertEquals(listOf("retained"), visible.map { it.item.id })
+        assertTrue(runner.state.value.searchError)
+        assertFalse(runner.state.value.searchInFlight)
+        assertFalse(runner.state.value.showProgress)
+    }
+
+    @Test fun slowReplacementUsesDelayedProgressAndKeepsItsDisplayedQueryUntilPublication() = runTest {
+        val replacement = CompletableDeferred<List<ItemWithCollections>>()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val source = listOf(row("old"))
+        val runner = LatestLocalSearch(backgroundScope, { replacement.await() }, {}, {}, {}, dispatcher, dispatcher)
+        runner.refresh(LocalSearchContext(sourceItems = source))
+        runCurrent()
+        runner.refresh(LocalSearchContext(query = "new", sourceItems = source), debounceQuery = true)
+        runCurrent()
+        advanceTimeBy(274)
+        runCurrent()
+        assertFalse(runner.state.value.showProgress)
+        assertEquals("", runner.state.value.displayedQuery)
+        assertTrue(runner.state.value.searchInFlight)
+        assertFalse(runner.state.value.queryPending)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(runner.state.value.showProgress)
+        assertEquals(listOf("old"), runner.state.value.result!!.items.map { it.item.id })
+        replacement.complete(listOf(row("new")))
+        runCurrent()
+        assertFalse(runner.state.value.showProgress)
+        assertEquals("new", runner.state.value.displayedQuery)
+        assertEquals(listOf("new"), runner.state.value.result!!.items.map { it.item.id })
+    }
+
+    @Test fun roomBurstsCoalesceReplacementQueriesWithoutClearingResults() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        var calls = 0
+        var invalidations = 0
+        val source = listOf(row("retained"))
+        val runner = LatestLocalSearch(backgroundScope, { calls++; source }, { invalidations++ }, {}, {}, dispatcher, dispatcher)
+        val context = LocalSearchContext(query = "search", sourceItems = source)
+        runner.refresh(context)
+        runCurrent()
+        repeat(10) {
+            runner.refresh(context, sourceRefresh = true)
+            runCurrent()
+            advanceTimeBy(10)
+            assertTrue(runner.state.value.hasPreviousResults)
+            assertFalse(runner.state.value.showProgress)
+        }
+        assertEquals(1, calls)
+        advanceTimeBy(75)
+        runCurrent()
+        assertEquals(2, calls)
+        assertEquals(1, invalidations)
+    }
+
+    @Test fun collectionChangeClearsPreviousResultsBeforeSuspending() = runTest {
+        var visible = emptyList<ItemWithCollections>()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val runner = LatestLocalSearch(backgroundScope, { CompletableDeferred<List<ItemWithCollections>>().await() },
+            { visible = emptyList() }, { visible = it.items }, {}, dispatcher, dispatcher)
+        runner.refresh(LocalSearchContext(sourceItems = listOf(row("outside"))))
+        runCurrent()
+        runner.refresh(LocalSearchContext(query = "search", collectionId = "other"))
+        assertTrue(visible.isEmpty())
+    }
+
+    @Test fun roomRefreshImmediatelyRemovesUnavailableRowsButRetainsOtherMatches() = runTest {
+        var visible = emptyList<ItemWithCollections>()
+        var suspended = false
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val kept = row("kept", collection = "folder")
+        val removed = row("removed", collection = "folder")
+        val runner = LatestLocalSearch(backgroundScope, {
+            if (suspended) CompletableDeferred<List<ItemWithCollections>>().await() else listOf(kept, removed)
+        }, { visible = emptyList() }, { visible = it.items }, {}, dispatcher, dispatcher)
+        runner.refresh(LocalSearchContext(query = "search", collectionId = "folder", sourceItems = listOf(kept, removed)))
+        runCurrent()
+        suspended = true
+        runner.refresh(LocalSearchContext(query = "search", collectionId = "folder", sourceItems = listOf(kept)))
+        assertEquals(listOf("kept"), visible.map { it.item.id })
+    }
+
     @Test fun typedOfflineQueryUsesOnlyTheSuppliedLocalSearchDependency() = runTest {
         val queries = mutableListOf<String>()
         val publications = mutableListOf<LocalSearchResult>()

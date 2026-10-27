@@ -22,7 +22,6 @@ import com.example.ui.components.SearchResultsContent
 import com.example.ui.components.SearchSelectionActions
 import com.example.ui.components.additionalAiMatches
 import com.example.ui.screens.LibraryScreen
-import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.PersonalLibraryTheme
 import com.personallibrary.core.model.ItemKind
 import kotlinx.coroutines.runBlocking
@@ -55,11 +54,7 @@ class LocalSearchUiTest {
         }
     }
 
-    @Test fun libraryShowsInheritedFiltersAndClearPreservesQuery() = checkFilters(searchScreen = false)
-
-    @Test fun searchShowsInheritedFiltersAndClearPreservesQuery() = checkFilters(searchScreen = true)
-
-    private fun checkFilters(searchScreen: Boolean) {
+    @Test fun libraryShowsInheritedFiltersAndClearPreservesQuery() {
         prepare()
         val row = seed()
         val collection = CollectionEntity("search-ui-col-${UUID.randomUUID()}", "Synthetic chosen collection")
@@ -71,7 +66,7 @@ class LocalSearchUiTest {
             vm.setCustomDateRange(1L, 2L)
             compose.activity.setContent {
                 PersonalLibraryTheme {
-                    if (searchScreen) SearchScreen(vm, {}, {}) else LibraryScreen(vm, {}, {}, {}, {})
+                    LibraryScreen(vm, {}, {}, {}, {})
                 }
             }
         }
@@ -96,6 +91,24 @@ class LocalSearchUiTest {
         }
         compose.onNodeWithTag("active_search_filters").assertDoesNotExist()
         compose.onNodeWithTag("item_card_${row.id}").assertIsDisplayed()
+    }
+
+    @Test fun libraryKeepsAiInsideSearchAndExpandsSecondaryFiltersOnDemand() {
+        prepare()
+        val row = seed()
+        compose.runOnUiThread {
+            compose.activity.setContent { PersonalLibraryTheme { LibraryScreen(vm, {}, {}, {}, {}) } }
+        }
+        waitForResults(setOf(row.id))
+        val search = compose.onNodeWithTag("library_search_input").getUnclippedBoundsInRoot()
+        val action = compose.onNodeWithTag("ask_ai_search_button").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue(action.top >= search.top && action.bottom <= search.bottom)
+        compose.onNodeWithTag("type_filter_strip").assertDoesNotExist()
+        compose.onNodeWithTag("filters_sort_button").performScrollTo().performClick()
+        compose.onNodeWithTag("type_filter_strip").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("sort_order_button").performScrollTo().assertIsDisplayed().assertHasClickAction()
+        compose.onNodeWithTag("filters_sort_button").performScrollTo().performClick()
+        compose.onNodeWithTag("type_filter_strip").assertDoesNotExist()
     }
 
     @Test fun prefixResultsKeepSnippetsInListAndGrid() {

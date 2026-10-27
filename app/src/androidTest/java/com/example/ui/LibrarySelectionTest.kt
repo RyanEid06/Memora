@@ -13,7 +13,6 @@ import com.example.data.ItemCollectionCrossRef
 import com.example.model.DateFilter
 import com.example.model.LibraryLayout
 import com.example.ui.screens.LibraryScreen
-import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.PersonalLibraryTheme
 import com.personallibrary.core.model.ItemKind
 import kotlinx.coroutines.runBlocking
@@ -101,9 +100,7 @@ class LibrarySelectionTest {
         val first = seed("first")
         val second = seed("second")
         val hidden = seed("unmatched", body = "Different synthetic text")
-        compose.runOnUiThread {
-            compose.activity.setContent { PersonalLibraryTheme { SearchScreen(vm, {}, {}) } }
-        }
+        showLibrary(LibraryLayout.LIST)
         waitForVisible(setOf(first.id, second.id))
         compose.onNodeWithTag("item_card_${first.id}").performTouchInput { longClick() }
         selectAllVisible()
