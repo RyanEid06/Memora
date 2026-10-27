@@ -44,9 +44,9 @@ class LocalMatchSnippetTest {
         assertFalse(snippet.contains("Heart notes"))
     }
 
-    @Test fun substringFallbackRemainsAvailableWhenNoFieldContainsPrefixEvidence() {
+    @Test fun midTokenSubstringIsNotPresentedAsPrefixEvidence() {
         val document = item.copy(title = "Heart notes", originalFileName = null, extractedText = "Unrelated details")
-        assertEquals("Heart notes", buildLocalMatchSnippet(document, "ear"))
+        assertNull(buildLocalMatchSnippet(document, "ear"))
     }
 
     @Test fun expandingUnicodeCaseMappingKeepsSnippetOffsetsInOriginalText() {
@@ -57,10 +57,10 @@ class LocalMatchSnippetTest {
         assertTrue(snippet.length <= 120)
     }
 
-    @Test fun removedFtsOperatorsAreNeverReturnedAsMatchEvidence() {
+    @Test fun operatorWordsHaveOrdinaryLiteralPrefixEvidence() {
         val document = item.copy(title = "ORGANIC", originalFileName = null, extractedText = "birthday cat")
-        assertEquals("birthday cat", buildLocalMatchSnippet(document, "bir OR cat"))
-        assertNull(buildLocalMatchSnippet(document, "OR AND NOT"))
+        assertEquals("ORGANIC", buildLocalMatchSnippet(document, "bir OR cat"))
+        assertEquals("ORGANIC", buildLocalMatchSnippet(document, "OR AND NOT"))
     }
 
     @Test fun supplementaryLetterIsNotAWordBoundary() {

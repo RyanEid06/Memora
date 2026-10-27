@@ -96,7 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedCollectionId = MutableStateFlow<String?>(null)
     val selectedCollectionId: StateFlow<String?> = _selectedCollectionId.asStateFlow()
 
-    private val _sortOrder = MutableStateFlow(SortOrder.SAVED_NEWEST)
+    private val _sortOrder = MutableStateFlow(SortOrder.RELEVANCE)
     val sortOrder: StateFlow<SortOrder> = _sortOrder.asStateFlow()
 
     private val _dateFilter = MutableStateFlow(DateFilter.ALL_TIME)
@@ -199,7 +199,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onRetained = {
             _localSearchResults.value = it.items
             _groupedSections.value = it.sections
-        }
+        },
+        pageSearch = { context, cursor -> repository.searchPage(context.toLibrarySearchRequest(), cursor) }
     )
     internal val localSearchState = localSearch.state
 
@@ -217,7 +218,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         // Observe active items from Room
         viewModelScope.launch {
-            repository.observeActiveItemsWithCollections().collect {
+            repository.observeActiveItemSummaries().collect {
                 aiSnapshot?.let { snapshot ->
                     val expected = snapshot.items.associateBy { row -> row.item.id }
                     if (it.count { row -> expected[row.item.id] == row } != expected.size) {
@@ -316,6 +317,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun buildMatchSnippet(item: ItemEntity, query: String): String? = buildLocalMatchSnippet(item, query)
+
+    fun loadMoreLocalResults() = localSearch.loadMore()
 
     private suspend fun updateStorageStats() = withContext(Dispatchers.IO) {
         val rootDir = File(getApplication<Application>().filesDir, "storage_root")

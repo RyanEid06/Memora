@@ -12,6 +12,9 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.ItemEntity
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,6 +24,24 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ItemPresentationTest {
+    @Test fun previewSharingFetchesFullCurrentTextAndLinkBeforeCreatingTheChooser() = runBlocking {
+        for (kind in listOf("TEXT", "LINK")) {
+            val launched = CompletableDeferred<Intent>()
+            val context = object : ContextWrapper(ApplicationProvider.getApplicationContext<Context>()) {
+                override fun startActivity(intent: Intent) { launched.complete(intent) }
+            }
+            val content = if (kind == "LINK") "https://example.test/" + "a".repeat(1000) else "Synthetic long body ".repeat(1000)
+            val full = ItemEntity("synthetic-share", "Current title", content, kind)
+            val preview = full.copy(title = "Previous title", content = content.take(512))
+            shareItemEntity(context, preview, null, this) { full }
+            val chooser = withTimeout(5000) { launched.await() }
+            @Suppress("DEPRECATION")
+            val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+            assertEquals("Current title", send.getStringExtra(Intent.EXTRA_SUBJECT))
+            assertEquals(if (kind == "LINK") content else "Current title\n\n$content", send.getStringExtra(Intent.EXTRA_TEXT))
+        }
+    }
+
     @Test fun namedOriginalExportPreservesBytesSanitizesPathAndKeepsPreviousExportAlive() {
         val app = ApplicationProvider.getApplicationContext<Context>()
         val source = java.io.File(app.cacheDir, "synthetic-blob.bin")

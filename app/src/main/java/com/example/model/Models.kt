@@ -3,6 +3,7 @@ package com.example.model
 typealias ItemKind = com.personallibrary.core.model.ItemKind
 
 enum class SortOrder(val label: String) {
+    RELEVANCE("Relevance"),
     SAVED_NEWEST("Newest Saved"),
     SAVED_OLDEST("Oldest Saved"),
     SOURCE_NEWEST("Newest Source Date"),

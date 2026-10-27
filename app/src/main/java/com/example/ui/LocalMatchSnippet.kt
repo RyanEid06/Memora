@@ -15,13 +15,13 @@ internal fun buildLocalMatchSnippet(item: ItemEntity, query: String): String? {
         item.aiDescription?.takeIf { it.isNotBlank() },
         item.aiConcepts?.takeIf { it.isNotBlank() }
     )
-    fun findSnippet(requireTokenStart: Boolean): String? {
+    fun findSnippet(): String? {
         for (text in candidates) {
             for (token in tokens) {
                 // Keep indices in the original text: Unicode lowercasing can expand its length.
                 var index = text.indexOf(token, ignoreCase = true)
                 while (index != -1) {
-                    if (!requireTokenStart || index == 0 || !Character.isLetterOrDigit(text.codePointBefore(index))) {
+                    if (index == 0 || !Character.isLetterOrDigit(text.codePointBefore(index))) {
                         val start = maxOf(0, index - 40)
                         val end = minOf(text.length, index + token.length + 60)
                         val prefix = if (start > 0) "…" else ""
@@ -34,7 +34,5 @@ internal fun buildLocalMatchSnippet(item: ItemEntity, query: String): String? {
         }
         return null
     }
-    // Prefer evidence consistent with FTS prefixes anywhere in the item. Substring evidence
-    // remains useful for the existing LIKE fallback when no field has a word-start match.
-    return findSnippet(requireTokenStart = true) ?: findSnippet(requireTokenStart = false)
+    return findSnippet()
 }

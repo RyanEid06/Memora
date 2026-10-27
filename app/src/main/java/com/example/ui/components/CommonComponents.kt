@@ -142,7 +142,8 @@ fun ItemCard(
     isSelected: Boolean = false,
     onSelectToggle: () -> Unit = {},
     matchingSnippet: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    loadFullItem: (suspend () -> ItemEntity?)? = null
 ) {
     val context = LocalContext.current
     val shareScope = rememberCoroutineScope()
@@ -364,7 +365,7 @@ fun ItemCard(
 
                 Row {
                     IconButton(
-                        onClick = { shareItemEntity(context, item, blobFile, shareScope) },
+                        onClick = { shareItemEntity(context, item, blobFile, shareScope, loadFullItem) },
                         enabled = !isSelectMode,
                         modifier = Modifier.size(48.dp).testTag("share_btn_${item.id}")
                     ) {
@@ -405,7 +406,8 @@ fun ItemGridCard(
     isSelectMode: Boolean = false,
     isSelected: Boolean = false,
     onSelectToggle: () -> Unit = {},
-    matchingSnippet: String? = null
+    matchingSnippet: String? = null,
+    loadFullItem: (suspend () -> ItemEntity?)? = null
 ) {
     val context = LocalContext.current
     val shareScope = rememberCoroutineScope()
@@ -513,7 +515,7 @@ fun ItemGridCard(
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 IconButton(
-                    onClick = { shareItemEntity(context, item, blobFile, shareScope) },
+                    onClick = { shareItemEntity(context, item, blobFile, shareScope, loadFullItem) },
                     enabled = !isSelectMode,
                     modifier = Modifier.size(48.dp).testTag("share_btn_${item.id}")
                 ) {
@@ -570,7 +572,22 @@ private fun launchPreparedIntent(context: Context, scope: CoroutineScope?, prepa
     }
 }
 
-fun shareItemEntity(context: Context, item: ItemEntity, file: File?, scope: CoroutineScope? = null) {
+fun shareItemEntity(context: Context, displayedItem: ItemEntity, file: File?, scope: CoroutineScope? = null,
+    loadFullItem: (suspend () -> ItemEntity?)? = null) {
+    if (loadFullItem != null) {
+        checkNotNull(scope).launch {
+            try {
+                val current = withContext(Dispatchers.IO) {
+                    checkNotNull(loadFullItem()?.takeUnless { it.isTrash }) { "Saved item is unavailable" }
+                }
+                check(current.contentHash == displayedItem.contentHash) { "Saved original changed" }
+                shareItemEntity(context, current, file, scope)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { Toast.makeText(context, "Could not share this item. Please try again.", Toast.LENGTH_LONG).show() }
+        }
+        return
+    }
+    val item = displayedItem
     launchPreparedIntent(context, scope) {
         val send = Intent(Intent.ACTION_SEND).apply {
             putExtra(Intent.EXTRA_SUBJECT, item.title)

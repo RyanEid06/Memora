@@ -3,7 +3,10 @@ package com.example.data
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
-@Entity(tableName = "items")
+@Entity(tableName = "items", indices = [
+    Index(value = ["isTrash", "createdAt", "id"], orders = [Index.Order.ASC, Index.Order.DESC, Index.Order.ASC]),
+    Index(value = ["isTrash", "trashTimestamp", "id"], orders = [Index.Order.ASC, Index.Order.DESC, Index.Order.ASC])
+])
 data class ItemEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -106,7 +109,7 @@ data class AnalysisJobEntity(
     @ColumnInfo(defaultValue = "0") val metadataOnly: Boolean = false
 )
 
-@Fts4(contentEntity = ItemEntity::class)
+@Fts4(contentEntity = ItemEntity::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
 @Entity(tableName = "items_fts")
 data class ItemFtsEntity(
     val title: String,
@@ -147,6 +150,18 @@ data class AiCandidateState(
 
 @Dao
 interface LibraryDao {
+
+    @Transaction
+    @RawQuery
+    suspend fun getLocalSearchRows(query: androidx.sqlite.db.SupportSQLiteQuery): List<LocalSearchRow>
+
+    @Transaction
+    @RawQuery(observedEntities = [ItemEntity::class, CollectionEntity::class, ItemCollectionCrossRef::class])
+    fun observeItemSummaries(query: androidx.sqlite.db.SupportSQLiteQuery): Flow<List<ItemWithCollections>>
+
+    @Transaction
+    @Query("SELECT * FROM items WHERE id = :id LIMIT 1")
+    fun observeItemWithCollections(id: String): Flow<ItemWithCollections?>
 
     // The caller constructs only fixed SQL clauses and binds every data value and LIMIT.
     @Transaction
@@ -400,12 +415,14 @@ interface LibraryDao {
 private val LEGACY_FTS_TRIGGERS = setOf("items_fts_insert", "items_fts_bu", "items_fts_au", "items_fts_delete", "items_fts_update")
 
 val DATABASE_CALLBACK = object : androidx.room.RoomDatabase.Callback() {
+    private val searchableChange = listOf("title", "content", "originalFileName", "extractedText", "aiDescription", "aiConcepts")
+        .joinToString(" OR ") { "OLD.`$it` IS NOT NEW.`$it`" }
     // Match Room's contentEntity synchronization (also exported in schema 5).
     // Older versions installed a duplicate custom set beside these triggers.
     private val ftsTriggers = mapOf(
-        "BEFORE_UPDATE" to "BEFORE UPDATE ON `items` BEGIN DELETE FROM `items_fts` WHERE `docid`=OLD.`rowid`; END",
+        "BEFORE_UPDATE" to "BEFORE UPDATE ON `items` WHEN $searchableChange BEGIN DELETE FROM `items_fts` WHERE `docid`=OLD.`rowid`; END",
         "BEFORE_DELETE" to "BEFORE DELETE ON `items` BEGIN DELETE FROM `items_fts` WHERE `docid`=OLD.`rowid`; END",
-        "AFTER_UPDATE" to "AFTER UPDATE ON `items` BEGIN INSERT INTO `items_fts`(`docid`, `title`, `content`, `originalFileName`, `extractedText`, `aiDescription`, `aiConcepts`) VALUES (NEW.`rowid`, NEW.`title`, NEW.`content`, NEW.`originalFileName`, NEW.`extractedText`, NEW.`aiDescription`, NEW.`aiConcepts`); END",
+        "AFTER_UPDATE" to "AFTER UPDATE ON `items` WHEN $searchableChange BEGIN INSERT INTO `items_fts`(`docid`, `title`, `content`, `originalFileName`, `extractedText`, `aiDescription`, `aiConcepts`) VALUES (NEW.`rowid`, NEW.`title`, NEW.`content`, NEW.`originalFileName`, NEW.`extractedText`, NEW.`aiDescription`, NEW.`aiConcepts`); END",
         "AFTER_INSERT" to "AFTER INSERT ON `items` BEGIN INSERT INTO `items_fts`(`docid`, `title`, `content`, `originalFileName`, `extractedText`, `aiDescription`, `aiConcepts`) VALUES (NEW.`rowid`, NEW.`title`, NEW.`content`, NEW.`originalFileName`, NEW.`extractedText`, NEW.`aiDescription`, NEW.`aiConcepts`); END"
     ).mapKeys { (suffix, _) -> "room_fts_content_sync_items_fts_$suffix" }
         .mapValues { (name, body) -> "CREATE TRIGGER IF NOT EXISTS `$name` $body" }
@@ -552,6 +569,17 @@ val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
     }
 }
 
+val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_items_isTrash_createdAt_id ON items(isTrash ASC, createdAt DESC, id ASC)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_items_isTrash_trashTimestamp_id ON items(isTrash ASC, trashTimestamp DESC, id ASC)")
+        // Only the derived index changes. Owner text, originals, memberships and privacy stay intact.
+        db.execSQL("DROP TABLE IF EXISTS items_fts")
+        db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING FTS4(title TEXT NOT NULL, content TEXT NOT NULL, originalFileName TEXT, extractedText TEXT, aiDescription TEXT, aiConcepts TEXT, content=`items`, tokenize=unicode61)")
+        db.execSQL("INSERT INTO items_fts(items_fts) VALUES('rebuild')")
+    }
+}
+
 @Database(
     entities = [
         ItemEntity::class,
@@ -566,7 +594,7 @@ val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
         CollectionDeletionItem::class,
         PrivacyMigrationMembership::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class LibraryRoomDatabase : RoomDatabase() {

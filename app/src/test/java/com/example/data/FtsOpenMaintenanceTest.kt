@@ -52,6 +52,30 @@ class FtsOpenMaintenanceTest {
         assertEquals("kept", db.libraryDao().searchFts("birthday*").single().id)
     }
 
+    @Test fun metadataOnlyFullRowAndTargetedUpdatesDoNotRewriteFts() = runBlocking {
+        val dao = db.libraryDao()
+        val item = ItemEntity("metadata", "birthday", "body", "TEXT")
+        dao.insertItem(item)
+        var before = scalar("SELECT total_changes()")
+        dao.updateItem(item.copy(isFavorite = true, aiStatus = "QUEUED"))
+        assertEquals("Only the item row changes", 1L, scalar("SELECT total_changes()") - before)
+        before = scalar("SELECT total_changes()")
+        dao.setReminderDone(item.id, true)
+        assertEquals(1L, scalar("SELECT total_changes()") - before)
+        assertEquals(item.id, dao.searchFts("birthday*").single().id)
+        db.openHelper.writableDatabase.execSQL("INSERT INTO items_fts(items_fts) VALUES('integrity-check')")
+    }
+
+    @Test fun nullableSearchableChangesRemoveOldTermsAndPrivacyMetadata() = runBlocking {
+        val dao = db.libraryDao()
+        val item = ItemEntity("nullable", "Archive", "", "PHOTO", aiDescription = "secretneedle")
+        dao.insertItem(item)
+        dao.updateItem(item.copy(aiDescription = null, extractedText = "publicneedle"))
+        assertTrue(dao.searchFts("secretneedle*").isEmpty())
+        assertEquals(item.id, dao.searchFts("publicneedle*").single().id)
+        db.openHelper.writableDatabase.execSQL("INSERT INTO items_fts(items_fts) VALUES('integrity-check')")
+    }
+
     @Test fun unchangedOpenDoesNotRewriteSchemaOrRebuildIndex() = runBlocking {
         db.libraryDao().insertItem(ItemEntity("kept", "birthday", "", "TEXT"))
         val schemaBefore = scalar("PRAGMA schema_version")

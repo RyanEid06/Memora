@@ -137,7 +137,7 @@ fun LibraryScreen(
                             "computed_unfiled" -> "Inbox"
                             "computed_favorites" -> "Favorites"
                             "computed_due" -> "Reminders"
-                            null -> "Library • ${items.size} items"
+                            null -> "Library • ${items.size} ${if (searchState.result?.nextCursor != null) "loaded" else "items"}"
                             else -> collections.find { it.id == collectionScope }?.name ?: "Collection"
                         },
                         style = MaterialTheme.typography.titleMedium,
@@ -434,8 +434,16 @@ fun LibraryScreen(
                             isSelectMode = isBatchMode,
                             isSelected = itemWithCols.item.id in selectedItemIds,
                             onSelectToggle = { viewModel.toggleSelection(itemWithCols.item.id) },
-                            matchingSnippet = viewModel.buildMatchSnippet(itemWithCols.item, searchState.displayedQuery)
+                            matchingSnippet = searchState.result?.snippets?.get(itemWithCols.item.id),
+                            loadFullItem = { viewModel.repository.dao.getItemById(itemWithCols.item.id) }
                         )
+                    }
+                }
+                if (searchState.result?.nextCursor != null) item(key = "load_more", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                    TextButton(onClick = viewModel::loadMoreLocalResults,
+                        enabled = !searchState.queryPending && !searchState.searchInFlight,
+                        modifier = Modifier.fillMaxWidth().testTag("load_more_results")) {
+                        Text(if (searchState.searchInFlight) "Loading…" else "Load more • ${items.size} loaded")
                     }
                 }
             }
@@ -472,9 +480,7 @@ fun LibraryScreen(
                         }
                     }
                     items(section.items, key = { it.item.id }) { itemWithCols ->
-                        val snippet = remember(itemWithCols.item, searchState.displayedQuery) {
-                            viewModel.buildMatchSnippet(itemWithCols.item, searchState.displayedQuery)
-                        }
+                        val snippet = searchState.result?.snippets?.get(itemWithCols.item.id)
                         ItemCard(
                             itemWithCols = itemWithCols,
                             fileResolver = { hash -> viewModel.repository.assetStore.getBlobFile(hash) },
@@ -485,8 +491,16 @@ fun LibraryScreen(
                             isSelected = selectedItemIds.contains(itemWithCols.item.id),
                             onSelectToggle = { viewModel.toggleSelection(itemWithCols.item.id) },
                             matchingSnippet = snippet,
+                            loadFullItem = { viewModel.repository.dao.getItemById(itemWithCols.item.id) },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)
                         )
+                    }
+                }
+                if (searchState.result?.nextCursor != null) item(key = "load_more") {
+                    TextButton(onClick = viewModel::loadMoreLocalResults,
+                        enabled = !searchState.queryPending && !searchState.searchInFlight,
+                        modifier = Modifier.fillMaxWidth().testTag("load_more_results")) {
+                        Text(if (searchState.searchInFlight) "Loading…" else "Load more • ${items.size} loaded")
                     }
                 }
             }

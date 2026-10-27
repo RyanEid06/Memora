@@ -143,6 +143,12 @@ class ManagedAssetStoreTest {
 
 class SearchQueryTest {
 
+    @Test fun codePunctuationSeparatesTokensAndOperatorsAreLiteral() {
+        assertEquals(listOf("C", "foo", "bar", "AND", "OR", "NOT", "94", "100"),
+            SearchQuery.tokens("C++ foo-bar \"AND OR NOT\" 94/100"))
+        assertEquals("\"AND*\" \"OR*\" \"NOT*\"", SearchQuery.fts("AND OR NOT"))
+    }
+
     @Test fun operatorSubstringsDoNotDestroyWordsOrUnicode() {
         assertEquals("\"CANDOR*\" \"ORGANIC*\" \"café*\" \"كيمياء*\"", SearchQuery.fts("CANDOR ORGANIC café كيمياء"))
     }
@@ -154,15 +160,15 @@ class SearchQueryTest {
         assertNotNull(fts)
         assertTrue(fts!!.contains("\"chemistry*\""))
         assertTrue(fts.contains("\"grades*\""))
-        assertTrue(fts.contains("\"94/100*\""))
-        assertFalse(fts.contains("OR"))
+        assertTrue(fts.contains("\"94*\" \"100*\""))
+        assertTrue(fts.contains("\"OR*\""))
     }
 
     @Test
     fun testEmojiAndNonLatinSearch() {
         val fts = SearchQuery.fts("📚 university notes")
         assertNotNull(fts)
-        assertTrue(fts!!.contains("\"📚*\""))
+        assertFalse(fts!!.contains("📚"))
         assertTrue(fts.contains("\"university*\""))
     }
 

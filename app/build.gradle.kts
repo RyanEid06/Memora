@@ -32,7 +32,7 @@ val optimizedTests = providers.gradleProperty("memoraOptimizedTests").map { it.t
 tasks.withType<Test>().configureEach {
     systemProperty("memora.performanceBaseline", providers.gradleProperty("memoraPerformanceBaseline").getOrElse("false"))
     systemProperty("memora.performanceBaselineOutput", rootProject.layout.projectDirectory.file(
-        "artifacts/remediation-20261027/search-baseline.csv"
+        providers.gradleProperty("memoraPerformanceBaselineOutput").getOrElse("artifacts/remediation-20261027/search-baseline.csv")
     ).asFile.absolutePath)
     systemProperty("memora.performanceBaselineSource", providers.gradleProperty("memoraBaselineSource").getOrElse("unrecorded"))
 }

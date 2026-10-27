@@ -2,6 +2,9 @@ package com.example.ui
 
 import androidx.annotation.MainThread
 import com.example.data.ItemWithCollections
+import com.example.data.LibrarySearchCursor
+import com.example.data.LibrarySearchPage
+import com.example.data.LibrarySearchRequest
 import com.example.model.DateBasis
 import com.example.model.DateFilter
 import com.example.model.DateGrouping
@@ -43,7 +46,9 @@ internal data class LocalSearchContext(
 
 internal data class LocalSearchResult(
     val items: List<ItemWithCollections>,
-    val sections: List<GroupedLibrarySection>
+    val sections: List<GroupedLibrarySection>,
+    val snippets: Map<String, String> = emptyMap(),
+    val nextCursor: LibrarySearchCursor? = null
 )
 
 /** Display continuity never implies that selection or a request is current. */
@@ -69,7 +74,8 @@ internal class LatestLocalSearch(
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val publicationDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val onPending: () -> Unit = {},
-    private val onRetained: (LocalSearchResult) -> Unit = onResult
+    private val onRetained: (LocalSearchResult) -> Unit = onResult,
+    private val pageSearch: (suspend (LocalSearchContext, LibrarySearchCursor?) -> LibrarySearchPage)? = null
 ) {
     private val generation = AtomicLong()
     private var job: Job? = null
@@ -89,9 +95,10 @@ internal class LatestLocalSearch(
         // Room has already supplied the authoritative active rows. Remove deleted/moved rows
         // synchronously, before debounce, even while retaining the other displayed matches.
         if (retained != null && lastSourceItems != null && lastSourceItems !== context.sourceItems) {
-            val wanted = retained.items.mapTo(HashSet()) { it.item.id }
-            val current = context.sourceItems.filter { it.item.id in wanted }
-            retained = projectLocalSearch(current, requireNotNull(displayedContext))
+            val available = context.sourceItems.associateBy { it.item.id }
+            val current = retained.items.mapNotNull { available[it.item.id] }
+            retained = projectLocalSearch(current, requireNotNull(displayedContext), preserveOrder = true)
+                .copy(snippets = retained.snippets.filterKeys { id -> current.any { it.item.id == id } })
         }
         lastSourceItems = context.sourceItems
         val pending = debounceQuery && context.query.isNotBlank()
@@ -115,8 +122,10 @@ internal class LatestLocalSearch(
                     if (capturedGeneration == generation.get())
                         _state.value = _state.value.copy(queryPending = false, searchInFlight = true)
                 }
-                val rows = if (context.query.isBlank()) context.sourceItems else search(context.query)
-                val result = projectLocalSearch(rows, context)
+                val page = pageSearch?.invoke(context, null)
+                val rows = page?.items ?: if (context.query.isBlank()) context.sourceItems else search(context.query)
+                val result = projectLocalSearch(rows, context, preserveOrder = page != null)
+                    .copy(snippets = page?.snippets ?: emptyMap(), nextCursor = page?.nextCursor)
                 withContext(publicationDispatcher) {
                     if (capturedGeneration == generation.get()) {
                         displayedContext = context.copy(sourceItems = emptyList())
@@ -136,10 +145,45 @@ internal class LatestLocalSearch(
             } finally { progress.cancel() }
         }
     }
+
+    @MainThread
+    fun loadMore() {
+        val execute = pageSearch ?: return
+        val context = displayedContext ?: return
+        val previous = _state.value
+        val result = previous.result ?: return
+        val cursor = result.nextCursor ?: return
+        if (previous.queryPending || previous.searchInFlight) return
+        val capturedGeneration = generation.get()
+        onPending()
+        _state.value = previous.copy(searchInFlight = true, searchError = false)
+        job = scope.launch(workerDispatcher) {
+            try {
+                val page = execute(context, cursor)
+                val rows = (result.items + page.items).distinctBy { it.item.id }
+                val appended = projectLocalSearch(rows, context, preserveOrder = true)
+                    .copy(snippets = result.snippets + page.snippets, nextCursor = page.nextCursor)
+                withContext(publicationDispatcher) {
+                    if (capturedGeneration == generation.get()) {
+                        _state.value = LocalSearchState(appended, context.query, searchInFlight = false)
+                        onResult(appended)
+                    }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                withContext(publicationDispatcher) {
+                    if (capturedGeneration == generation.get()) {
+                        _state.value = _state.value.copy(searchInFlight = false, searchError = true)
+                        onError()
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** Also applies the visible UI constraints to additive AI candidates. It never calls a provider. */
-internal fun projectLocalSearch(rows: List<ItemWithCollections>, context: LocalSearchContext): LocalSearchResult {
+internal fun projectLocalSearch(rows: List<ItemWithCollections>, context: LocalSearchContext, preserveOrder: Boolean = false): LocalSearchResult {
     val calendar = Calendar.getInstance()
     val currentYear = calendar.get(Calendar.YEAR)
     val currentMonth = calendar.get(Calendar.MONTH)
@@ -171,7 +215,9 @@ internal fun projectLocalSearch(rows: List<ItemWithCollections>, context: LocalS
             }
         }
         .sortedWith { a, b ->
+            if (preserveOrder) return@sortedWith 0
             when (context.sort) {
+                SortOrder.RELEVANCE -> 0
                 SortOrder.SAVED_NEWEST -> b.item.createdAt.compareTo(a.item.createdAt)
                 SortOrder.SAVED_OLDEST -> a.item.createdAt.compareTo(b.item.createdAt)
                 SortOrder.SOURCE_NEWEST -> (b.item.sourceDate ?: Long.MIN_VALUE).compareTo(a.item.sourceDate ?: Long.MIN_VALUE)
@@ -194,4 +240,29 @@ internal fun projectLocalSearch(rows: List<ItemWithCollections>, context: LocalS
         }.map { (title, items) -> GroupedLibrarySection(title, items) }
     }
     return LocalSearchResult(filtered, sections)
+}
+
+internal fun LocalSearchContext.toLibrarySearchRequest(): LibrarySearchRequest {
+    var start: Long? = null
+    var end: Long? = null
+    var invalid = false
+    when (dateFilter) {
+        DateFilter.ALL_TIME -> Unit
+        DateFilter.CUSTOM -> {
+            start = customStart
+            end = customEnd?.takeUnless { it == Long.MAX_VALUE }?.plus(1)
+            invalid = customStart == null || customEnd == null || customStart > customEnd
+        }
+        DateFilter.THIS_MONTH, DateFilter.THIS_YEAR -> {
+            val calendar = Calendar.getInstance()
+            val year = calendar.get(Calendar.YEAR)
+            val month = if (dateFilter == DateFilter.THIS_YEAR) Calendar.JANUARY else calendar.get(Calendar.MONTH)
+            calendar.clear()
+            calendar.set(year, month, 1)
+            start = calendar.timeInMillis
+            calendar.add(if (dateFilter == DateFilter.THIS_YEAR) Calendar.YEAR else Calendar.MONTH, 1)
+            end = calendar.timeInMillis
+        }
+    }
+    return LibrarySearchRequest(query, kind?.name, collectionId, basis, start, end, invalid, sort)
 }

@@ -69,7 +69,7 @@ data class DateRange(
 object SearchQuery {
     /**
      * Sanitizes and transforms raw user query into safe FTS prefix syntax.
-     * Escapes quotes, removes dangerous SQL/FTS operators, handles non-Latin/emoji tokens.
+     * Punctuation separates tokens; operator words are literal Unicode prefixes.
      * Returns null if no searchable tokens remain.
      */
     fun fts(raw: String): String? {
@@ -83,23 +83,9 @@ object SearchQuery {
 
     /** Search and match evidence must agree on which terms the owner entered. */
     fun tokens(raw: String): List<String> {
-        val trimmed = raw.trim()
-        if (trimmed.isBlank()) return emptyList()
-
-        // Remove dangerous characters
-        val sanitized = trimmed
-            .replace("\"", "")
-            .replace("'", "")
-            .replace("*", "")
-            .replace("^", "")
-            .replace("(", " ")
-            .replace(")", " ")
-            .replace(":", " ")
-            .replace("-", " ")
-            .replace("+", " ")
-            .replace(Regex("\\b(OR|AND|NOT)\\b", RegexOption.IGNORE_CASE), " ")
-
-        return sanitized.split("\\s+".toRegex()).filter { it.isNotBlank() }
+        // Match FTS token boundaries: punctuation separates words; quoted operators
+        // remain literal words rather than changing the query grammar.
+        return Regex("[\\p{L}\\p{N}\\p{M}]+").findAll(raw).map { it.value }.toList()
     }
 }
 

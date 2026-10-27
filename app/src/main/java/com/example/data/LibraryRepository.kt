@@ -54,7 +54,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         LibraryRoomDatabase::class.java,
         "personal_library_room.db"
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         .addCallback(DATABASE_CALLBACK)
         .enableMultiInstanceInvalidation()
         .build()
@@ -635,51 +635,28 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         }
     }
 
-    suspend fun search(query: String): List<ItemEntity> = withContext(Dispatchers.IO) {
-        val sanitized = SearchQuery.fts(query)
-        val ftsResults = if (sanitized != null) {
-            try {
-                dao.searchFts(sanitized)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        } else emptyList()
-
-        if (ftsResults.isNotEmpty()) {
-            return@withContext ftsResults
-        }
-
-        // Substring LIKE fallback
-        val trimmed = query.trim()
-        if (trimmed.isNotBlank()) {
-            dao.searchLike("%$trimmed%")
-        } else {
-            dao.getAllActiveItems()
+    /** UI pages contain card previews only; detail, edit and export read full rows by ID. */
+    suspend fun searchPage(request: LibrarySearchRequest, cursor: LibrarySearchCursor? = null): LibrarySearchPage = withContext(Dispatchers.IO) {
+        try {
+            // The DAO already wraps row/relationship reads in one read-only transaction.
+            val fetched = dao.getLocalSearchRows(LocalSearchQueries.page(request, cursor))
+            val rows = fetched.take(LocalSearchQueries.PAGE_SIZE)
+            LibrarySearchPage(rows.map { ItemWithCollections(it.item, it.collections) },
+                rows.mapNotNull { row -> row.matchSnippet?.takeIf { it.isNotBlank() }?.let { row.item.id to it } }.toMap(),
+                rows.lastOrNull()?.takeIf { fetched.size > LocalSearchQueries.PAGE_SIZE }?.let { LocalSearchQueries.cursor(request, it) })
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (failure: Exception) {
+            android.util.Log.w("MemoraSearch", "local_search_failed ${failure.javaClass.simpleName}")
+            throw failure
         }
     }
 
-    suspend fun searchWithCollections(query: String): List<ItemWithCollections> = withContext(Dispatchers.IO) {
-        val sanitized = SearchQuery.fts(query)
-        val ftsResults = if (sanitized != null) {
-            try {
-                dao.searchFtsWithCollections(sanitized)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        } else emptyList()
+    suspend fun search(query: String): List<ItemEntity> = searchPage(LibrarySearchRequest(query = query)).items.map { it.item }
 
-        if (ftsResults.isNotEmpty()) {
-            return@withContext ftsResults
-        }
+    suspend fun searchWithCollections(query: String): List<ItemWithCollections> = searchPage(LibrarySearchRequest(query = query)).items
 
-        val trimmed = query.trim()
-        if (trimmed.isNotBlank()) {
-            dao.searchLikeWithCollections("%$trimmed%")
-        } else {
-            dao.observeItemsWithCollections().first()
-        }
-    }
-
+    fun observeActiveItemSummaries(): Flow<List<ItemWithCollections>> = dao.observeItemSummaries(
+        androidx.sqlite.db.SimpleSQLiteQuery("SELECT ${LocalSearchQueries.SUMMARY_COLUMNS} FROM items i WHERE i.isTrash = 0 ORDER BY i.createdAt DESC, i.id"))
     private suspend fun backupSnapshot(): BackupManifest = db.withTransaction {
         val allItems = dao.getAllItemsIncludingTrash()
         val allCols = dao.getAllCollections()

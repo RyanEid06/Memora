@@ -308,6 +308,56 @@ class LocalSearchUiTest {
         }
     }
 
+    @Test fun libraryPagesExplicitlyInListAndGridAndSelectsOnlyLoadedRows() {
+        prepare()
+        runBlocking {
+            repeat(75) { index ->
+                val row = ItemEntity("page-ui-$token-$index", "$token $index", "Synthetic", "TEXT", createdAt = index.toLong())
+                itemIds += row.id
+                vm.repository.dao.insertItem(row)
+            }
+        }
+        for (layout in listOf(LibraryLayout.LIST, LibraryLayout.GRID)) {
+            compose.runOnUiThread {
+                vm.clearSelection()
+                vm.setLibraryLayout(layout)
+                vm.setSearchQuery("$token nohit")
+                vm.setSearchQuery(token)
+            }
+            compose.waitUntil(10_000) { vm.resultsReady.value && vm.localSearchResults.value.size == 50 }
+            compose.onNodeWithText("Library • 50 loaded").assertIsDisplayed()
+            compose.runOnUiThread { vm.beginSelection() }
+            selectAllVisible()
+            compose.runOnIdle { assertEquals(50, vm.selectedItemIds.value.size) }
+            compose.runOnUiThread { vm.clearSelection() }
+            val container = compose.onNodeWithTag(if (layout == LibraryLayout.LIST) "library_list" else "library_grid")
+            container.performScrollToNode(hasTestTag("load_more_results"))
+            compose.onNodeWithTag("load_more_results").performClick()
+            compose.waitUntil(10_000) { vm.resultsReady.value && vm.localSearchResults.value.size == 75 }
+            compose.onNodeWithTag("load_more_results").assertDoesNotExist()
+            compose.runOnUiThread { vm.beginSelection() }
+            selectAllVisible()
+            compose.runOnIdle { assertEquals(75, vm.selectedItemIds.value.size) }
+        }
+    }
+
+    @Test fun fullNoteSurvivesOpeningAndSavingFromAPreviewCard() {
+        prepare()
+        val row = seed(body = "Synthetic long text ".repeat(40) + "preserved tail")
+        waitForResults(setOf(row.id))
+        compose.runOnIdle { assertEquals(512, vm.localSearchResults.value.single().item.content.length) }
+        compose.onNodeWithTag("library_list").performScrollToNode(hasTestTag("item_card_${row.id}"))
+        compose.onNodeWithTag("item_card_${row.id}").performClick()
+        compose.onNodeWithText(row.content).assertExists()
+        compose.onNodeWithTag("edit_item_button").performClick()
+        compose.onNodeWithTag("edit_item_body").assertTextContains(row.content)
+        compose.onNodeWithTag("edit_item_title").performTextReplacement("Updated full note")
+        Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("edit_item_save").performClick()
+        compose.waitUntil(10_000) { runBlocking { vm.repository.dao.getItemById(row.id)?.title == "Updated full note" } }
+        runBlocking { assertEquals(row.content, vm.repository.dao.getItemById(row.id)!!.content) }
+    }
+
     private fun seed(body: String = "birthday picnic", indexedToken: Boolean = true): ItemEntity {
         val row = ItemEntity("search-ui-${UUID.randomUUID()}", "Synthetic indexed note", if (indexedToken) "$token $body" else body, "TEXT")
         itemIds += row.id

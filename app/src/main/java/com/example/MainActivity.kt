@@ -216,7 +216,18 @@ fun MainAppScaffold(
     val incomingShareId by viewModel.incomingShareId.collectAsState()
     val collections by viewModel.collections.collectAsState()
     val allItems by viewModel.items.collectAsState()
-    val activeDetailItem = allItems.find { it.item.id == activeDetailItemId }
+    // Cards carry bounded previews. Always observe the full row for detail and edit.
+    val detailState = produceState<ItemWithCollections?>(null, activeDetailItemId, viewModel) {
+        value = null
+        activeDetailItemId?.let { id ->
+            viewModel.repository.dao.observeItemWithCollections(id).collect { row ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                    value = row?.takeUnless { it.item.isTrash }
+                }
+            }
+        }
+    }
+    val activeDetailItem = detailState.value?.takeIf { it.item.id == activeDetailItemId }
     val selectedBrowseId by viewModel.selectedCollectionId.collectAsState()
     val pendingDeletion by viewModel.pendingCollectionDeletion.collectAsState()
     val captureContextId = if (currentDestination == AppDestination.COLLECTIONS) collectionDetailId else null

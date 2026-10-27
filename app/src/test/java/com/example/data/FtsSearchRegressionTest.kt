@@ -113,7 +113,10 @@ class FtsSearchRegressionTest {
         val query = SearchQuery.fts("\"bir\" OR (can*) AND org^ NOT title:درج")!!
         // The column-like text is a literal extra token, never a column selector.
         assertTrue(dao.searchFts(query).isEmpty())
-        val safe = SearchQuery.fts("\"bir\" OR (can*) AND org^ NOT درج")!!
+        val safe = SearchQuery.fts("\"bir\" (can*) org^ درج")!!
         assertEquals(listOf("match"), dao.searchFts(safe).map { it.id })
+        // Operator words now have the same literal prefix semantics as other words.
+        assertEquals(listOf("match"), dao.searchFts(SearchQuery.fts("bir OR")!!).map { it.id })
+        assertTrue(dao.searchFts(SearchQuery.fts("bicy OR")!!).isEmpty())
     }
 }

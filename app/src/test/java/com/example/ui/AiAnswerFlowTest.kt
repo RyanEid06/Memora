@@ -224,6 +224,27 @@ class AiAnswerFlowTest {
         assertFalse(requireNotNull(vm.repository.dao.getItemById("local-source")).isTrash)
     }
 
+    @Test fun selectAllVisibleIncludesOnlyLoadedPagesAndRefreshPrunesUnloadedSelection() = runBlocking {
+        repeat(75) { index ->
+            vm.repository.dao.insertItem(ItemEntity("paged-$index", "pageword", "synthetic", "TEXT", createdAt = index.toLong()))
+        }
+        vm.setSearchQuery("pageword")
+        await { vm.resultsReady.value && vm.localSearchResults.value.size == 50 }
+        vm.beginSelection()
+        vm.selectAllVisible { vm.localSearchResults.value.map { it.item.id } }
+        await { vm.selectedItemIds.value.size == 50 }
+        assertEquals(50, vm.selectedItemIds.value.size)
+        vm.loadMoreLocalResults()
+        await { vm.resultsReady.value && vm.localSearchResults.value.size == 75 }
+        assertEquals(50, vm.selectedItemIds.value.size)
+        vm.selectAllVisible { vm.localSearchResults.value.map { it.item.id } }
+        await { vm.selectedItemIds.value.size == 75 }
+        vm.repository.dao.insertItem(ItemEntity("paged-new", "pageword", "synthetic", "TEXT", createdAt = 1000))
+        await { vm.resultsReady.value && vm.localSearchResults.value.size == 50 && vm.localSearchResults.value.first().item.id == "paged-new" }
+        assertEquals(49, vm.selectedItemIds.value.size)
+        assertFalse(vm.selectedItemIds.value.contains("paged-new"))
+    }
+
     @Test fun unrelatedRoomChangeKeepsCompletedAnswerButSourceEditClearsIt() = runBlocking {
         ask()
         assertNotNull("AI error=${vm.aiSearchError.value}; request paths=${requests.map { it.first }}; " +

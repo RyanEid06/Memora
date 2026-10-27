@@ -12,6 +12,7 @@ import com.example.data.LibraryRepository
 import com.example.data.LibraryRoomDatabase
 import com.example.model.DateFilter
 import com.example.model.ItemKind
+import com.example.model.SortOrder
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
@@ -38,7 +39,7 @@ class SearchPerformanceBaselineTest {
         report.appendLine("# Synthetic search baseline (host JVM / Robolectric API 34 / in-memory Room)")
         report.appendLine("source=${System.getProperty("memora.performanceBaselineSource", "unrecorded")}")
         report.appendLine("java=${System.getProperty("java.version")}; os=${System.getProperty("os.name")}; arch=${System.getProperty("os.arch")}; processors=${Runtime.getRuntime().availableProcessors()}")
-        report.appendLine("Fixture construction excluded; repository + relation loading + current Kotlin projection included.")
+        report.appendLine("Bounded SQL-filtered first pages (max 50 rows); repository + relation loading + grouping included, fixture construction excluded.")
         report.appendLine("First query is NOT a cold-device measurement. Warm samples=20, nearest-rank percentiles; no latency threshold.")
         report.appendLine("No personal content, provider access, device operations or production database files.")
         report.appendLine("items,scenario,results,first_ms,warm_p50_ms,warm_p95_ms,warm_p99_ms,selects_per_call,like_queries_per_call")
@@ -49,7 +50,7 @@ class SearchPerformanceBaselineTest {
             val db = Room.inMemoryDatabaseBuilder(context, LibraryRoomDatabase::class.java)
                 .addCallback(DATABASE_CALLBACK)
                 .setQueryCallback({ sql, _ ->
-                    if (sql.trimStart().startsWith("SELECT", ignoreCase = true)) selects.incrementAndGet()
+                    if (sql.trimStart().let { it.startsWith("SELECT", true) || it.startsWith("WITH", true) }) selects.incrementAndGet()
                     if (sql.contains(" LIKE ", ignoreCase = true)) fallbacks.incrementAndGet()
                 }, Executor { it.run() })
                 .build()
@@ -81,11 +82,13 @@ class SearchPerformanceBaselineTest {
                     dateFilter = DateFilter.CUSTOM, customStart = (count / 2).toLong(), customEnd = (count - 1).toLong()
                 )
                 val cases = listOf(
-                    Triple("title", LocalSearchContext(query = "needletitle"), count / 100),
-                    Triple("ocr", LocalSearchContext(query = "ocrneedle"), count / 100),
-                    Triple("no-hit", LocalSearchContext(query = "unfindablezzzx"), 0),
-                    Triple("one-character", LocalSearchContext(query = "s"), count),
-                    Triple("scoped", scoped, (0 until count).count { it % 200 == 0 && it >= count / 2 })
+                    Triple("browse", LocalSearchContext(sort = SortOrder.RELEVANCE), count),
+                    Triple("title", LocalSearchContext(query = "needletitle", sort = SortOrder.RELEVANCE), count / 100),
+                    Triple("ocr", LocalSearchContext(query = "ocrneedle", sort = SortOrder.RELEVANCE), count / 100),
+                    Triple("no-hit", LocalSearchContext(query = "unfindablezzzx", sort = SortOrder.RELEVANCE), 0),
+                    Triple("one-character", LocalSearchContext(query = "s", sort = SortOrder.RELEVANCE), count),
+                    Triple("one-character-saved", LocalSearchContext(query = "s"), count),
+                    Triple("scoped", scoped.copy(sort = SortOrder.RELEVANCE), (0 until count).count { it % 200 == 0 && it >= count / 2 })
                 )
                 for ((name, searchContext, expected) in cases) {
                     val selectStart = selects.get()
@@ -93,20 +96,20 @@ class SearchPerformanceBaselineTest {
                     val samples = mutableListOf<Double>()
                     repeat(21) {
                         val start = System.nanoTime()
-                        val rows = repository.searchWithCollections(searchContext.query)
-                        val result = projectLocalSearch(rows, searchContext)
+                        val page = repository.searchPage(searchContext.toLibrarySearchRequest())
+                        val result = projectLocalSearch(page.items, searchContext, preserveOrder = true)
                         samples += (System.nanoTime() - start) / 1_000_000.0
-                        assertEquals("$count/$name", expected, result.items.size)
+                        assertEquals("$count/$name", minOf(50, expected), result.items.size)
                         assertEquals(result.items, result.sections.flatMap { it.items })
                         if (name == "scoped") assertEquals(
-                            (0 until count).filter { it % 200 == 0 && it >= count / 2 }.map { "baseline-$it" }.toSet(),
+                            (0 until count).filter { it % 200 == 0 && it >= count / 2 }.reversed().take(50).map { "baseline-$it" }.toSet(),
                             result.items.map { it.item.id }.toSet()
                         )
                     }
                     val warm = samples.drop(1).sorted()
                     fun percentile(fraction: Double) = warm[ceil(warm.size * fraction).toInt() - 1]
                     fun format(value: Double) = String.format(java.util.Locale.ROOT, "%.3f", value)
-                    val line = listOf(count, name, expected, format(samples.first()), format(percentile(.50)),
+                    val line = listOf(count, name, minOf(50, expected), format(samples.first()), format(percentile(.50)),
                         format(percentile(.95)), format(percentile(.99)),
                         format((selects.get() - selectStart) / 21.0), format((fallbacks.get() - fallbackStart) / 21.0))
                         .joinToString(",")

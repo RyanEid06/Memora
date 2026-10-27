@@ -3,6 +3,9 @@ package com.example.ui
 import com.example.data.CollectionEntity
 import com.example.data.ItemEntity
 import com.example.data.ItemWithCollections
+import com.example.data.LibrarySearchCursor
+import com.example.data.LibrarySearchPage
+import com.example.data.LibrarySearchRequest
 import com.example.model.DateFilter
 import com.example.model.DateGrouping
 import com.example.model.ItemKind
@@ -274,5 +277,61 @@ class LatestLocalSearchTest {
         val rows = listOf(row("inside", saved = 100), row("outside", saved = 200))
         val result = projectLocalSearch(rows, LocalSearchContext(dateFilter = DateFilter.CUSTOM, customStart = 90, customEnd = 110, collectionId = "computed_unfiled"))
         assertEquals(listOf("inside"), result.items.map { it.item.id })
+    }
+
+    @Test fun loadedPagesAppendOnlyOnceAndSourceRefreshResetsTheirCursor() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        var calls = 0
+        val pending = CompletableDeferred<LibrarySearchPage>()
+        val request = LibrarySearchRequest(query = "needle")
+        val cursor = LibrarySearchCursor(request, 0, 100, "first", "first")
+        val source = listOf(row("first"), row("second"))
+        val runner = LatestLocalSearch(backgroundScope, { error("Legacy query path") }, {}, {}, {}, dispatcher, dispatcher,
+            pageSearch = { _, after ->
+                calls++
+                if (after == null) LibrarySearchPage(listOf(source[0]), mapOf("first" to "needle"), cursor)
+                else pending.await()
+            })
+        val context = LocalSearchContext(query = "needle", sourceItems = source)
+        runner.refresh(context)
+        runCurrent()
+        runner.loadMore()
+        runner.loadMore()
+        runCurrent()
+        assertEquals(2, calls)
+        assertTrue(runner.state.value.searchInFlight)
+        pending.complete(LibrarySearchPage(source, mapOf("second" to "needle too"), null))
+        runCurrent()
+        assertEquals(listOf("first", "second"), runner.state.value.result!!.items.map { it.item.id })
+        assertEquals(setOf("first", "second"), runner.state.value.result!!.snippets.keys)
+        assertNull(runner.state.value.result!!.nextCursor)
+        runner.refresh(context.copy(sourceItems = source.toList()), sourceRefresh = true)
+        assertNull(runner.state.value.result!!.nextCursor)
+        advanceTimeBy(75)
+        runCurrent()
+        assertEquals(listOf("first"), runner.state.value.result!!.items.map { it.item.id })
+        assertEquals(cursor, runner.state.value.result!!.nextCursor)
+    }
+
+    @Test fun cancellationResistantOldPageCannotAppendAfterQueryChanges() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val pending = CompletableDeferred<LibrarySearchPage>()
+        val cursor = LibrarySearchCursor(LibrarySearchRequest(query = "old"), 0, 100, "old", "old")
+        val runner = LatestLocalSearch(backgroundScope, { error("Legacy query path") }, {}, {}, {}, dispatcher, dispatcher,
+            pageSearch = { context, after ->
+                if (after != null) withContext(NonCancellable) { pending.await() }
+                else LibrarySearchPage(listOf(row(context.query)), emptyMap(), if (context.query == "old") cursor else null)
+            })
+        runner.refresh(LocalSearchContext(query = "old"))
+        runCurrent()
+        runner.loadMore()
+        runCurrent()
+        runner.refresh(LocalSearchContext(query = "current"))
+        runCurrent()
+        pending.complete(LibrarySearchPage(listOf(row("obsolete-page")), emptyMap(), null))
+        runCurrent()
+        assertEquals("current", runner.state.value.displayedQuery)
+        assertEquals(listOf("current"), runner.state.value.result!!.items.map { it.item.id })
+        assertFalse(runner.state.value.searchInFlight)
     }
 }

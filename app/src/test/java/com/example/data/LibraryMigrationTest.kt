@@ -19,6 +19,53 @@ import kotlinx.serialization.json.*
 @Config(sdk = [34])
 class LibraryMigrationTest {
 
+    @Test fun version6UpgradeRebuildsUnicodeIndexAndPreservesFullRowsAndMetadata() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "migration6_${java.util.UUID.randomUUID()}.db"
+        val schema = Json.parseToJsonElement(File("schemas/com.example.data.LibraryRoomDatabase/6.json").readText()).jsonObject.getValue("database").jsonObject
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context).name(name)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(6) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        schema.getValue("entities").jsonArray.forEach { value ->
+                            val entity = value.jsonObject
+                            val table = entity.getValue("tableName").jsonPrimitive.content
+                            db.execSQL(entity.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+                            entity["indices"]?.jsonArray?.forEach { index ->
+                                db.execSQL(index.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+                            }
+                        }
+                        schema.getValue("setupQueries").jsonArray.forEach { db.execSQL(it.jsonPrimitive.content) }
+                    }
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                }).build())
+        val fullBody = "Owner text ".repeat(1000)
+        helper.writableDatabase.apply {
+            execSQL("INSERT INTO items(id,title,content,kind,isFavorite,isTrash,createdAt,isReminderDone,isReminderExact,isReminderDateOnly,fileSizeBytes,localIndexCoverage,localIndexVersion,aiStatus) VALUES('item','مرحبا،بالعالم',?,'TEXT',1,0,123,0,1,0,0,'COMPLETE',7,'READY')", arrayOf(fullBody))
+            execSQL("INSERT INTO collections VALUES('folder','Preserved folder','folder','#ffffff',1,NULL)")
+            execSQL("INSERT INTO item_collection_cross_ref VALUES('item','folder')")
+            execSQL("INSERT INTO privacy_migration_memberships VALUES('item','private-folder')")
+            execSQL("INSERT INTO items_fts(items_fts) VALUES('rebuild')")
+        }
+        helper.close()
+        val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
+            .setJournalMode(androidx.room.RoomDatabase.JournalMode.TRUNCATE)
+            .addMigrations(MIGRATION_6_7).addCallback(DATABASE_CALLBACK).build()
+        try {
+            val dao = migrated.libraryDao()
+            assertEquals(fullBody, dao.getItemById("item")!!.content)
+            assertTrue(dao.getItemById("item")!!.isFavorite)
+            assertEquals(listOf("folder"), dao.getCollectionIdsForItem("item"))
+            assertEquals(1, dao.getPrivacyMigrationMemberships().size)
+            assertEquals("item", dao.searchFts(SearchQuery.fts("مرحبا،بالعالم")!!).single().id)
+            val before = migrated.openHelper.writableDatabase.query("SELECT total_changes()").use { it.moveToFirst(); it.getLong(0) }
+            dao.updateItem(dao.getItemById("item")!!.copy(isFavorite = false))
+            val after = migrated.openHelper.writableDatabase.query("SELECT total_changes()").use { it.moveToFirst(); it.getLong(0) }
+            assertEquals(1L, after - before)
+            migrated.openHelper.writableDatabase.execSQL("INSERT INTO items_fts(items_fts) VALUES('integrity-check')")
+        } finally { migrated.close(); context.deleteDatabase(name) }
+    }
+
     @Test fun version5UpgradeKeepsOldestFolderOriginalsAndAllPrivacyExclusions() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "migration5_${java.util.UUID.randomUUID()}.db"
@@ -52,7 +99,7 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_5_6).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7).addCallback(DATABASE_CALLBACK).build()
         try {
             val repository = LibraryRepository(context, migrated)
             val dao = repository.dao
@@ -107,7 +154,7 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).addCallback(DATABASE_CALLBACK).build()
         try {
             val dao = migrated.libraryDao()
             assertNull(dao.getAllCollections().single { it.id == "legacy" }.appRole)

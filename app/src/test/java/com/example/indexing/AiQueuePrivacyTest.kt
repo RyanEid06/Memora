@@ -183,7 +183,7 @@ class AiQueuePrivacyTest {
             assertEquals(listOf("/v1/auth/challenge"), requests)
             requests.clear()
             val database = androidx.room.Room.databaseBuilder(context, com.example.data.LibraryRoomDatabase::class.java,
-                "personal_library_room.db").addMigrations(com.example.data.MIGRATION_5_6).addCallback(com.example.data.DATABASE_CALLBACK).build()
+                "personal_library_room.db").addMigrations(com.example.data.MIGRATION_5_6, com.example.data.MIGRATION_6_7).addCallback(com.example.data.DATABASE_CALLBACK).build()
             try {
                 database.openHelper.writableDatabase.execSQL("INSERT INTO privacy_migration_memberships VALUES(?, ?)", arrayOf(item.id, "old-private"))
                 context.getSharedPreferences("personal_library_settings", 0).edit().putStringSet("excluded_collections", setOf("old-private")).commit()
@@ -245,9 +245,11 @@ class AiQueuePrivacyTest {
             }
             val worker = TestListenableWorkerBuilder<DurableAiWorker>(context,
                 inputData = workDataOf("item_id" to item.id, "content_version" to indexed.localIndexVersion)).build()
-            assertEquals(if (excludeCollection) ListenableWorker.Result.success() else ListenableWorker.Result.retry(), worker.doWork())
+            val result = try { worker.doWork() } catch (failure: Exception) { throw AssertionError("Direct 401 worker failed", failure) }
+            assertEquals(if (excludeCollection) ListenableWorker.Result.success() else ListenableWorker.Result.retry(), result)
             assertEquals(listOf("/v1/ai/analyze"), requests.toList())
-            assertTrue(repository.search("chemistry").any { it.id == item.id })
+            val local = try { repository.search("chemistry") } catch (failure: Exception) { throw AssertionError("Post-401 local search failed", failure) }
+            assertTrue(local.any { it.id == item.id })
             val job = repository.dao.getAnalysisJob(item.id)!!
             assertEquals(if (excludeCollection) "EXCLUDED" else "QUEUED", job.status)
             if (!excludeCollection) assertEquals(0, job.attempts)
