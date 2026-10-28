@@ -29,7 +29,7 @@ class CollectionDeletionWorker(context: Context, parameters: WorkerParameters) :
     override suspend fun doWork(): Result {
         val operation = inputData.getString("operation") ?: return Result.failure()
         return try {
-            val repository = LibraryRepository(applicationContext)
+            val repository = LibraryRepository.getInstance(applicationContext)
             repository.completeOwnerFeedbackMigration()
             if (repository.finalizeCollectionDeletion(operation)) Result.success() else Result.retry()
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }

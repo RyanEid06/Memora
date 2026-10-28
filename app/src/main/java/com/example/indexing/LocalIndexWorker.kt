@@ -4,14 +4,26 @@ import android.content.Context
 import androidx.work.*
 import com.example.data.LibraryRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 class LocalIndexWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
-        val repository = LibraryRepository(applicationContext)
+        val repository = LibraryRepository.getInstance(applicationContext)
         val indexer = LocalIndexer(applicationContext, repository)
-        for (item in repository.dao.getAllActiveItems().filter { it.aiStatus == "PENDING" || it.localIndexCoverage == "PENDING" }) {
-            try { indexer.indexItem(item) } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { repository.dao.updateAiStatus(item.id, "NEEDS_RETRY") }
+        var afterId: String? = null
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val ids = repository.pendingLocalIndexIds(afterId)
+            if (ids.isEmpty()) break
+            for (id in ids) {
+                currentCoroutineContext().ensureActive()
+                val item = repository.dao.getItemById(id) ?: continue
+                if (item.isTrash || item.aiStatus != "PENDING" && item.localIndexCoverage != "PENDING") continue
+                try { indexer.indexItem(item) } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { repository.dao.updateAiStatus(item.id, "NEEDS_RETRY") }
+            }
+            afterId = ids.last()
         }
         indexer.enqueuePendingAnalysisJobs()
         return Result.success()

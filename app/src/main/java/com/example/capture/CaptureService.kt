@@ -51,7 +51,7 @@ class CaptureService : Service() {
         active = scope.launch {
             var message = "Saving could not finish. Items already committed are kept; share unfinished files again."
             try {
-                val repository = LibraryRepository(this@CaptureService)
+                val repository = LibraryRepository.getInstance(this@CaptureService)
                 repository.completeOwnerFeedbackMigration()
                 val reminder = if (intent.hasExtra("capture_reminder_time")) com.example.data.CaptureReminder(
                     intent.getLongExtra("capture_reminder_time", 0), intent.getBooleanExtra("capture_reminder_exact", false),

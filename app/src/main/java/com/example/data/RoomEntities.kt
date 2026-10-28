@@ -192,6 +192,11 @@ interface LibraryDao {
     @Query("SELECT * FROM items WHERE isTrash = 0")
     suspend fun getAllActiveItems(): List<ItemEntity>
 
+    @Query("""SELECT id FROM items WHERE isTrash = 0
+        AND (aiStatus = 'PENDING' OR localIndexCoverage = 'PENDING')
+        AND (:afterId IS NULL OR id > :afterId) ORDER BY id LIMIT :limit""")
+    suspend fun getPendingLocalIndexIds(afterId: String?, limit: Int): List<String>
+
     @Query("SELECT * FROM items")
     suspend fun getAllItemsIncludingTrash(): List<ItemEntity>
 

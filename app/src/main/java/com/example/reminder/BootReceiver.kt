@@ -14,7 +14,7 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action
         if (action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_TIMEZONE_CHANGED || action == Intent.ACTION_TIME_CHANGED) {
             val pending = goAsync()
-            val repository = LibraryRepository(context)
+            val repository = LibraryRepository.getInstance(context)
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     reschedulePending(context, repository)

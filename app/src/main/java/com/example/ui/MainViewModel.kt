@@ -58,7 +58,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val libraryMessageEvents = Channel<String>(Channel.BUFFERED)
     val libraryMessages = libraryMessageEvents.receiveAsFlow()
 
-    val repository = LibraryRepository(application)
+    val repository = LibraryRepository.getInstance(application)
     val appLockManager = AppLockManager(application)
     val reminderScheduler = ReminderScheduler(application)
     val aiGateway = AiGateway(application)
@@ -89,6 +89,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _storageStats = MutableStateFlow(StorageStats())
     val storageStats: StateFlow<StorageStats> = _storageStats.asStateFlow()
+    private val storageStatsRefresher = StorageStatsRefresher(viewModelScope, ::updateStorageStats)
 
     private val _selectedKind = MutableStateFlow<ItemKind?>(null)
     val selectedKind: StateFlow<ItemKind?> = _selectedKind.asStateFlow()
@@ -242,7 +243,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _items.value = it
                 refreshFilteredResults(sourceRefresh = true)
-                viewModelScope.launch { updateStorageStats() }
+                storageStatsRefresher.request()
             }
         }
 
@@ -257,7 +258,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.observeTrashItems().collect {
                 _trashItems.value = it
-                updateStorageStats()
+                storageStatsRefresher.request()
             }
         }
     }
@@ -1039,7 +1040,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // remove that active session; the staging owner separately retries abandoned cleanup.
             getApplication<Application>().cacheDir.listFiles()?.filterNot { it.name == "staging" }?.forEach { it.deleteRecursively() }
             repository.cleanAbandonedRestoreStages()
-            updateStorageStats()
+            storageStatsRefresher.request()
         }
     }
 

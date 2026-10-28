@@ -245,6 +245,14 @@ class AiAnswerFlowTest {
         assertFalse(vm.selectedItemIds.value.contains("paged-new"))
     }
 
+    @Test fun viewModelsInOneApplicationReuseTheSameRepository() {
+        val secondStore = ViewModelStore()
+        try {
+            val second = ViewModelProvider(secondStore, ViewModelProvider.AndroidViewModelFactory(app))[MainViewModel::class.java]
+            assertSame(vm.repository, second.repository)
+        } finally { secondStore.clear() }
+    }
+
     @Test fun unrelatedRoomChangeKeepsCompletedAnswerButSourceEditClearsIt() = runBlocking {
         ask()
         assertNotNull("AI error=${vm.aiSearchError.value}; request paths=${requests.map { it.first }}; " +

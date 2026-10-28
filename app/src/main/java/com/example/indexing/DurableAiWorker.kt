@@ -32,7 +32,7 @@ class DurableAiWorker(
         val itemId = inputData.getString("item_id") ?: return@withContext Result.failure()
 
         val prefs = applicationContext.getSharedPreferences("personal_library_settings", Context.MODE_PRIVATE)
-        val repository = LibraryRepository(applicationContext)
+        val repository = LibraryRepository.getInstance(applicationContext)
         repository.completeOwnerFeedbackMigration()
         val initialItem = repository.dao.getItemById(itemId) ?: return@withContext Result.success()
         val expectedVersion = initialItem.localIndexVersion

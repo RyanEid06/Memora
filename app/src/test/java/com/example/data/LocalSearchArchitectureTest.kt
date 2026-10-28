@@ -78,4 +78,22 @@ class LocalSearchArchitectureTest {
         dao.updateItem(edited)
         assertEquals(edited, dao.observeItemWithCollections(original.id).first()!!.item)
     }
+
+    @Test fun pendingIndexIdsAreBoundedAndAdvanceAfterEarlierRowsFinish() = runBlocking {
+        repeat(75) { index -> dao.insertItem(ItemEntity("pending-${index.toString().padStart(3, '0')}", "Synthetic", "", "TEXT")) }
+        dao.insertItem(ItemEntity("pending-075", "Synthetic", "", "TEXT", localIndexCoverage = "COMPLETE", aiStatus = "PENDING"))
+        dao.insertItem(ItemEntity("pending-076", "Synthetic", "", "TEXT", aiStatus = "EXCLUDED"))
+        dao.insertItem(ItemEntity("indexed", "Synthetic", "", "TEXT", aiStatus = "READY", localIndexCoverage = "COMPLETE"))
+        dao.insertItem(ItemEntity("trash", "Synthetic", "", "TEXT", isTrash = true))
+        val first = repository.pendingLocalIndexIds()
+        assertEquals((0..31).map { "pending-${it.toString().padStart(3, '0')}" }, first)
+        first.forEach { id -> dao.updateItem(dao.getItemById(id)!!.copy(aiStatus = "READY", localIndexCoverage = "COMPLETE")) }
+        val second = repository.pendingLocalIndexIds(first.last())
+        assertEquals((32..63).map { "pending-${it.toString().padStart(3, '0')}" }, second)
+        assertEquals((64..76).map { "pending-${it.toString().padStart(3, '0')}" }, repository.pendingLocalIndexIds(second.last()))
+        assertTrue(repository.pendingLocalIndexIds("pending-076").isEmpty())
+        assertEquals(listOf("pending-032"), repository.pendingLocalIndexIds(limit = 1))
+        assertTrue(runCatching { repository.pendingLocalIndexIds(limit = 0) }.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(runCatching { repository.pendingLocalIndexIds(limit = 33) }.exceptionOrNull() is IllegalArgumentException)
+    }
 }

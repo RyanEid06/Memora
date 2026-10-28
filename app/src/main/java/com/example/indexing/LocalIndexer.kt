@@ -2,6 +2,7 @@ package com.example.indexing
 
 import android.content.Context
 import androidx.work.*
+import kotlinx.coroutines.flow.first
 import com.example.data.AnalysisJobEntity
 import com.example.data.ItemEntity
 import com.example.data.LibraryRepository
@@ -111,11 +112,11 @@ class LocalIndexer(
         val versionTag = "ai_version_${item.localIndexVersion}"
         val networkType = if (prefs.getBoolean("ai_wifi_only", false)) NetworkType.UNMETERED else NetworkType.CONNECTED
         val manager = WorkManager.getInstance(context)
-        val liveWork = manager.getWorkInfosForUniqueWork("ai_job_$itemId").get().filter { !it.state.isFinished }
+        val liveWork = manager.getWorkInfosForUniqueWorkFlow("ai_job_$itemId").first().filter { !it.state.isFinished }
         if (liveWork.any { versionTag in it.tags && it.constraints.requiredNetworkType == networkType }) return@withLock
         if (job.attempts >= 4) {
             // An obsolete request must not survive a preference change, even at the retry ceiling.
-            if (liveWork.isNotEmpty()) manager.cancelUniqueWork("ai_job_$itemId").result.get()
+            if (liveWork.isNotEmpty()) manager.cancelUniqueWork("ai_job_$itemId").await()
             repository.updateAnalysisJobIfCurrent(job.copy(status = "NEEDS_RETRY"))
             return@withLock
         }
@@ -140,7 +141,7 @@ class LocalIndexer(
             "ai_job_$itemId",
             policy,
             request
-        ).result.get()
+        ).await()
     }
 
     /** Privacy changes only alter AI eligibility. Local extraction and keyword documents remain intact. */
@@ -150,7 +151,7 @@ class LocalIndexer(
             val shouldEnqueue = queueMutations.withLock {
                 val item = repository.dao.getItemById(itemId) ?: return@withLock false
                 if (item.isTrash) {
-                    WorkManager.getInstance(context).cancelUniqueWork("ai_job_$itemId").result.get()
+                    WorkManager.getInstance(context).cancelUniqueWork("ai_job_$itemId").await()
                     return@withLock false
                 }
                 val currentJob = repository.dao.getAnalysisJob(itemId)?.takeIf { it.expectedContentVersion == item.localIndexVersion }
@@ -158,7 +159,7 @@ class LocalIndexer(
                 val excluded = itemId in prefs.getStringSet("excluded_items", emptySet()).orEmpty() ||
                     repository.dao.getCollectionIdsForItem(itemId).any { it in prefs.getStringSet("excluded_collections", emptySet()).orEmpty() }
                 if (excluded) {
-                    WorkManager.getInstance(context).cancelUniqueWork("ai_job_$itemId").result.get()
+                    WorkManager.getInstance(context).cancelUniqueWork("ai_job_$itemId").await()
                     repository.updateAnalysisJobIfCurrent(currentJob.copy(status = "EXCLUDED"))
                     return@withLock false
                 }
@@ -206,7 +207,7 @@ class LocalIndexer(
     suspend fun retryAnalysis(itemId: String) = withContext(Dispatchers.IO) {
         val item = repository.dao.getItemById(itemId) ?: return@withContext
         if (item.isTrash) return@withContext
-        WorkManager.getInstance(context).cancelUniqueWork("ai_job_$itemId").result.get()
+        WorkManager.getInstance(context).cancelUniqueWork("ai_job_$itemId").await()
         val job = repository.dao.getAnalysisJob(itemId)
         if (job?.metadataOnly == true && job.expectedContentVersion == item.localIndexVersion) {
             repository.updateAnalysisJobIfCurrent(job.copy(status = "QUEUED", attempts = 0, lastErrorClass = null, lastErrorTime = null))

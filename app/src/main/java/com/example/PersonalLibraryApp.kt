@@ -11,6 +11,7 @@ import coil.decode.ImageDecoderDecoder
 import com.example.reminder.ReminderReceiver
 
 class PersonalLibraryApp : Application(), ImageLoaderFactory {
+    val repository by lazy { com.example.data.LibraryRepository(this) }
     val captureState by lazy { com.example.capture.CaptureStateStore(this) }
 
     override fun onCreate() {

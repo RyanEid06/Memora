@@ -31,7 +31,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                handleIntent(context, intent, LibraryRepository(context))
+                handleIntent(context, intent, LibraryRepository.getInstance(context))
             } finally {
                 pending.finish()
             }

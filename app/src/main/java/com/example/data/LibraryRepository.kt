@@ -37,6 +37,8 @@ import java.net.URI
 
 class LibraryRepository(private val context: Context, database: LibraryRoomDatabase? = null) {
     companion object {
+        fun getInstance(context: Context): LibraryRepository =
+            (context.applicationContext as com.example.PersonalLibraryApp).repository
         private val assetMutations = Mutex()
         private val reservedCollectionNames = listOf("Favorites", "Inbox", "Unfiled", "Reminders", "Due Reminders", "Trash", "All Items")
     }
@@ -60,6 +62,11 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         .build()
 
     val dao = db.libraryDao()
+
+    internal suspend fun pendingLocalIndexIds(afterId: String? = null, limit: Int = 32): List<String> {
+        require(limit in 1..32) { "Local index batches allow at most 32 IDs" }
+        return dao.getPendingLocalIndexIds(afterId, limit)
+    }
 
     suspend fun completeOwnerFeedbackMigration() = withContext(Dispatchers.IO) {
         db.withTransaction {
