@@ -81,6 +81,16 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             }
             PersonalLibraryTheme(darkTheme = darkTheme) {
                 val isLocked by viewModel.appLockManager.isLocked.collectAsState()
+                // Keep only the voice draft/result registration across a lock handoff. The
+                // hidden dialog pauses its controller and never resumes recording on unlock.
+                var showVoiceSearchDialog by rememberSaveable { mutableStateOf(false) }
+                if (showVoiceSearchDialog) {
+                    VoiceSearchDialog(
+                        onDismiss = { showVoiceSearchDialog = false },
+                        onQueryConfirmed = viewModel::setSearchQuery,
+                        visible = !isLocked
+                    )
+                }
                 if (isLocked) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -131,6 +141,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     MainAppScaffold(
                         viewModel = viewModel,
                         intentTargetItemId = notificationTargetItemId,
+                        onOpenVoiceSearch = { showVoiceSearchDialog = true },
                         onIntentTargetConsumed = { itemId ->
                             if (notificationTargetItemId == itemId) {
                                 notificationTargetItemId = null
@@ -202,14 +213,14 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 fun MainAppScaffold(
     viewModel: MainViewModel,
     intentTargetItemId: String?,
-    onIntentTargetConsumed: (String) -> Unit = {}
+    onIntentTargetConsumed: (String) -> Unit = {},
+    onOpenVoiceSearch: () -> Unit = {}
 ) {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
     var collectionDetailId by rememberSaveable { mutableStateOf<String?>(null) }
     var activeDetailItemId by rememberSaveable { mutableStateOf<String?>(null) }
     var editingItem by remember { mutableStateOf<ItemWithCollections?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var showVoiceSearchDialog by remember { mutableStateOf(false) }
     val destinationStates = rememberSaveableStateHolder()
 
     val incomingShare by viewModel.incomingShare.collectAsState()
@@ -288,7 +299,7 @@ fun MainAppScaffold(
 
     // Dialogs handle their own dismissal; screen selection handles Back before navigation.
     val hasModal = activeDetailItem != null || editingItem != null || showAddDialog ||
-        showVoiceSearchDialog || incomingShare != null
+        incomingShare != null
     BackHandler(enabled = currentDestination != AppDestination.LIBRARY && !hasModal && !isBatchMode) {
         navigateUp()
     }
@@ -373,7 +384,7 @@ fun MainAppScaffold(
                     } else LibraryScreen(
                         viewModel = viewModel,
                         onOpenItemDetail = { activeDetailItemId = it.item.id },
-                        onOpenVoiceSearch = { showVoiceSearchDialog = true },
+                        onOpenVoiceSearch = onOpenVoiceSearch,
                         onOpenSettings = { viewModel.clearSelection(); currentDestination = AppDestination.SETTINGS },
                         onOpenAddDialog = { showAddDialog = true }
                     )
@@ -394,7 +405,7 @@ fun MainAppScaffold(
                         LibraryScreen(
                             viewModel = viewModel,
                             onOpenItemDetail = { activeDetailItemId = it.item.id },
-                            onOpenVoiceSearch = { showVoiceSearchDialog = true },
+                            onOpenVoiceSearch = onOpenVoiceSearch,
                             onOpenSettings = { currentDestination = AppDestination.SETTINGS },
                             onOpenAddDialog = { showAddDialog = true },
                             collectionScope = detailId,
@@ -492,13 +503,4 @@ fun MainAppScaffold(
         }
     }
 
-    // Modal: Voice Search Dialog
-    if (showVoiceSearchDialog) {
-        VoiceSearchDialog(
-            onDismiss = { showVoiceSearchDialog = false },
-            onQueryConfirmed = { query ->
-                viewModel.setSearchQuery(query)
-            }
-        )
-    }
 }
