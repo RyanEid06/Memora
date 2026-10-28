@@ -8,7 +8,7 @@ The verified permanent-signed V1.0.1/code3 ARM64 and universal APKs use the [V1.
 
 ## Owner-feedback candidate
 
-The current QA branch is implementing the [approved 19-item owner plan](docs/CODEX_OWNER_FEEDBACK_2026_10_24.md) for private 1.0.2/code5. It adds one-folder organization with Inbox, persisted collection deletion Undo, GIFs, contextual reminders, Library/Collections/Settings navigation, automatic AI registration, scoped synonym retrieval, named original-file sharing, voice retry and SpendWise dark surfaces. Follow [CODEX_WORKLOG.md](CODEX_WORKLOG.md) for actual checks and remaining gates. These changes are not yet the public V1.0.1 release and the new backend registration route requires an approved deployment.
+The current QA branch is implementing the [approved 19-item owner plan](docs/CODEX_OWNER_FEEDBACK_2026_10_24.md) for private 1.0.2/code5. It adds one-folder organization with Inbox, persisted collection deletion Undo, animated GIFs under Video, contextual reminders, Library/Collections/Settings navigation, automatic AI registration, scoped synonym retrieval, named original-file sharing, voice retry and SpendWise dark surfaces. Follow [CODEX_WORKLOG.md](CODEX_WORKLOG.md) for actual checks and remaining gates. These changes are not yet the public V1.0.1 release and the new backend registration route requires an approved deployment.
 
 ## Published V1 capabilities
 

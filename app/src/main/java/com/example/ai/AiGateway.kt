@@ -567,7 +567,9 @@ class AiGateway(
             null
         }
 
-        planFromNetwork ?: parseLocalSearchPlan(query)
+        (planFromNetwork ?: parseLocalSearchPlan(query)).let { plan ->
+            plan.copy(targetKinds = plan.targetKinds.map { com.personallibrary.core.model.ItemKind.canonicalName(it) }.distinct())
+        }
     }
 
     private fun parseLocalSearchPlan(query: String): SearchPlanResponse {
@@ -577,7 +579,7 @@ class AiGateway(
 
         if (lower.contains("photo") || lower.contains("screenshot") || lower.contains("image")) targetKinds.add("PHOTO")
         if (lower.contains("sticker")) targetKinds.add("STICKER")
-        if (lower.contains("gif")) targetKinds.add("GIF")
+        if (lower.contains("gif")) targetKinds.add("VIDEO")
         if (lower.contains("link") || lower.contains("url")) targetKinds.add("LINK")
         if (lower.contains("audio") || lower.contains("voice")) targetKinds.add("AUDIO")
         if (lower.contains("document") || lower.contains("pdf")) targetKinds.add("DOCUMENT")

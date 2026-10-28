@@ -24,6 +24,19 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ItemPresentationTest {
+    @Test fun videoCategoryKeepsAnimatedContainersOnImagePreviewAndMp4OnVideoPreview() {
+        assertFalse(com.personallibrary.core.model.ItemKind.publicKinds.any { it.name == "GIF" })
+        assertEquals(getKindIcon("VIDEO"), getKindIcon("GIF"))
+        for (dark in listOf(false, true)) assertEquals(kindColorForTheme("VIDEO", dark), kindColorForTheme("GIF", dark))
+        for (mime in listOf(null, "application/octet-stream", "image/gif", "IMAGE/GIF; charset=binary")) {
+            val gif = ItemEntity("gif", "Animation", "", "VIDEO", mimeType = mime, originalFileName = "animation.GIF")
+            assertTrue(usesImagePreview(gif))
+            assertEquals("image/gif", originalMimeType(gif, null).substringBefore(';').lowercase())
+        }
+        assertFalse(usesImagePreview(ItemEntity("mp4", "Animation", "", "VIDEO", mimeType = "video/mp4", originalFileName = "animation.gif")))
+        assertTrue(usesImagePreview(ItemEntity("legacy", "Animation", "", "GIF")))
+    }
+
     @Test fun previewSharingFetchesFullCurrentTextAndLinkBeforeCreatingTheChooser() = runBlocking {
         for (kind in listOf("TEXT", "LINK")) {
             val launched = CompletableDeferred<Intent>()

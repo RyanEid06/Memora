@@ -21,6 +21,7 @@ import com.personallibrary.core.migration.DateOrder
 import com.personallibrary.core.migration.WhatsAppExportParser
 import com.personallibrary.core.model.ItemKind
 import com.personallibrary.core.model.SearchQuery
+import com.personallibrary.core.storage.ContentClassifier
 import com.personallibrary.core.storage.ManagedAssetStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -57,7 +58,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         LibraryRoomDatabase::class.java,
         "personal_library_room.db"
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
         .addCallback(DATABASE_CALLBACK)
         .enableMultiInstanceInvalidation()
         .build()
@@ -692,7 +693,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                     id = it.id,
                     title = it.title,
                     content = it.content,
-                    kind = ItemKind.valueOf(it.kind),
+                    kind = ItemKind.valueOf(ContentClassifier.normalizeLegacyKind(it.kind, it.mimeType, it.originalFileName)),
                     isFavorite = it.isFavorite,
                     isTrash = it.isTrash,
                     trashTimestamp = it.trashTimestamp,
@@ -721,7 +722,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                 BackupReminderRecord(it.id, it.itemId, it.title, it.dueMillis, it.isDone, it.isExact, it.isDateOnly, it.localDate)
             },
             assets = allAssets.map {
-                BackupAssetRecord(it.hash, it.relativePath, it.sizeBytes, it.mimeType, it.originalName, it.kind)
+                BackupAssetRecord(it.hash, it.relativePath, it.sizeBytes, it.mimeType, it.originalName, ContentClassifier.normalizeLegacyKind(it.kind, it.mimeType, it.originalName))
             }
         )
     }
@@ -881,11 +882,15 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                     item.contentHash?.let { hash ->
                         if (storedAssets[hash] == null || assetStore.getBlobFile(hash)?.isFile != true) throw IOException("Restored item has no physical original")
                     }
+                    val original = item.contentHash?.let(storedAssets::get)
+                    val originalName = item.originalFileName ?: original?.originalName
+                    val originalMime = item.mimeType?.takeUnless { it.isBlank() || it.substringBefore(';').trim().equals("application/octet-stream", true) }
+                        ?: original?.mimeType ?: item.mimeType
                     val entity = ItemEntity(
                         id = finalId,
                         title = item.title,
                         content = item.content,
-                        kind = item.kind.name,
+                        kind = ContentClassifier.normalizeLegacyKind(item.kind.name, originalMime, originalName),
                         isFavorite = item.isFavorite,
                         isTrash = item.isTrash,
                         trashTimestamp = item.trashTimestamp,
@@ -897,8 +902,8 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                         isReminderDateOnly = item.isReminderDateOnly,
                         reminderLocalDate = item.reminderLocalDate,
                         contentHash = item.contentHash,
-                        originalFileName = item.originalFileName,
-                        mimeType = item.mimeType,
+                        originalFileName = originalName,
+                        mimeType = originalMime,
                         fileSizeBytes = item.fileSizeBytes,
                         extractedText = null,
                         aiDescription = null,
@@ -977,7 +982,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                                     sizeBytes = asset.sizeBytes,
                                     originalName = asset.originalName ?: asset.hash,
                                     mimeType = asset.mimeType,
-                                    kind = asset.kind ?: "FILE",
+                                    kind = ContentClassifier.normalizeLegacyKind(asset.kind ?: stored.kind.name, asset.mimeType, asset.originalName ?: stored.originalName),
                                     refCount = count
                                 )
                             )

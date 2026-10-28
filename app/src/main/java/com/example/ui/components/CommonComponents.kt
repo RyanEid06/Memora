@@ -73,7 +73,7 @@ fun TypeFilterChipStrip(
                 modifier = Modifier.testTag("filter_chip_all")
             )
         }
-        items(ItemKind.values()) { kind ->
+        items(ItemKind.publicKinds) { kind ->
             FilterChip(
                 selected = selectedKind == kind,
                 onClick = { onKindSelected(kind) },
@@ -88,10 +88,9 @@ fun TypeFilterChipStrip(
 }
 
 fun getKindIcon(kindStr: String): ImageVector {
-    return when (kindStr) {
+    return when (ItemKind.canonicalName(kindStr)) {
         "PHOTO" -> Icons.Filled.Photo
         "STICKER" -> Icons.Filled.Face
-        "GIF" -> Icons.Filled.Gif
         "VIDEO" -> Icons.Filled.PlayArrow
         "AUDIO" -> Icons.Filled.Headphones
         "TEXT" -> Icons.Filled.Edit
@@ -106,10 +105,9 @@ fun getKindColor(kindStr: String): Color = kindColorForTheme(kindStr, LocalAppDa
 
 internal fun kindColorForTheme(kindStr: String, darkTheme: Boolean): Color {
     // Keep each type's hue, using readable foregrounds on both the card and its tinted badge.
-    if (darkTheme) return when (kindStr) {
+    if (darkTheme) return when (ItemKind.canonicalName(kindStr)) {
         "PHOTO" -> Color(0xFF93C5FD)
         "STICKER" -> Color(0xFFF9A8D4)
-        "GIF" -> Color(0xFFF9A8D4)
         "VIDEO" -> Color(0xFFFCA5A5)
         "AUDIO" -> Color(0xFFC4B5FD)
         "TEXT" -> Color(0xFF6EE7B7)
@@ -117,10 +115,9 @@ internal fun kindColorForTheme(kindStr: String, darkTheme: Boolean): Color {
         "DOCUMENT" -> Color(0xFFFCD34D)
         else -> Color(0xFFCBD5E1)
     }
-    return when (kindStr) {
+    return when (ItemKind.canonicalName(kindStr)) {
         "PHOTO" -> Color(0xFF1D4ED8)
         "STICKER" -> Color(0xFF9D174D)
-        "GIF" -> Color(0xFF9D174D)
         "VIDEO" -> Color(0xFFB91C1C)
         "AUDIO" -> Color(0xFF6D28D9)
         "TEXT" -> Color(0xFF065F46)
@@ -206,7 +203,7 @@ fun ItemCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = item.kind,
+                                text = ItemKind.canonicalName(item.kind),
                                 color = kindColor,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
@@ -260,7 +257,7 @@ fun ItemCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Visual Thumbnail
-            if (blobFile != null && (item.kind == "PHOTO" || item.kind == "STICKER" || item.kind == "GIF")) {
+            if (blobFile != null && usesImagePreview(item)) {
                 AsyncImage(
                     model = blobFile,
                     contentDescription = item.title,
@@ -306,7 +303,7 @@ fun ItemCard(
                         )
                     }
                 }
-            } else if (item.content.isNotBlank() && item.kind != "PHOTO" && item.kind != "STICKER") {
+            } else if (item.content.isNotBlank() && !usesImagePreview(item)) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = item.content,
@@ -436,7 +433,7 @@ fun ItemGridCard(
                 Checkbox(checked = isSelected, onCheckedChange = { onSelectToggle() }, modifier = Modifier.size(48.dp))
             }
             // Visual header or icon
-            if (blobFile != null && (item.kind == "PHOTO" || item.kind == "STICKER" || item.kind == "GIF")) {
+            if (blobFile != null && usesImagePreview(item)) {
                 AsyncImage(
                     model = blobFile,
                     contentDescription = item.title,
@@ -471,7 +468,7 @@ fun ItemGridCard(
 
             Text(
                 text = matchingSnippet?.takeIf { it.isNotBlank() }
-                    ?: item.content.takeUnless { item.kind in setOf("PHOTO", "STICKER", "GIF") }.orEmpty(),
+                    ?: item.content.takeUnless { usesImagePreview(item) }.orEmpty(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 minLines = 2,
@@ -488,7 +485,7 @@ fun ItemGridCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = item.kind,
+                    text = ItemKind.canonicalName(item.kind),
                     color = kindColor,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -643,3 +640,6 @@ fun openItemEntityExternally(context: Context, item: ItemEntity, file: File?, sc
         Toast.makeText(context, "Could not open: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
+
+internal fun usesImagePreview(item: ItemEntity): Boolean = item.kind in setOf("PHOTO", "STICKER", "GIF") ||
+    ContentClassifier.isAnimatedGif(item.mimeType, item.originalFileName)

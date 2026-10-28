@@ -19,6 +19,68 @@ import kotlinx.serialization.json.*
 @Config(sdk = [34])
 class LibraryMigrationTest {
 
+    @Test fun version7GifMergePreservesEveryOtherColumnAndSearchIndex() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "migration7_${java.util.UUID.randomUUID()}.db"
+        val schema = Json.parseToJsonElement(File("schemas/com.example.data.LibraryRoomDatabase/7.json").readText()).jsonObject.getValue("database").jsonObject
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context).name(name)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(7) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        schema.getValue("entities").jsonArray.forEach { value ->
+                            val entity = value.jsonObject
+                            val table = entity.getValue("tableName").jsonPrimitive.content
+                            db.execSQL(entity.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+                            entity["indices"]?.jsonArray?.forEach { index ->
+                                db.execSQL(index.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table))
+                            }
+                        }
+                        schema.getValue("setupQueries").jsonArray.forEach { db.execSQL(it.jsonPrimitive.content) }
+                    }
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                }).build())
+        val cases = listOf(
+            listOf("legacy", "GIF", "image/gif", "animation.gif"),
+            listOf("mime", "PHOTO", " IMAGE/GIF; charset=binary ", "extensionless"),
+            listOf("filename", "FILE", "application/octet-stream", "Animation.GIF"),
+            listOf("mp4", "VIDEO", "video/mp4", "animation.gif"),
+            listOf("photo", "PHOTO", "image/jpeg", "photo.jpg"),
+            listOf("sticker", "STICKER", "image/gif", "sticker.gif")
+        )
+        fun snapshot(db: SupportSQLiteDatabase, table: String): List<List<String?>> =
+            db.query("SELECT * FROM $table ORDER BY 1").use { cursor ->
+                buildList { while (cursor.moveToNext()) add(cursor.columnNames.indices.filter { cursor.columnNames[it] != "kind" }.map { if (cursor.isNull(it)) null else cursor.getString(it) }) }
+            }
+        val before = linkedMapOf<String, List<List<String?>>>()
+        helper.writableDatabase.apply {
+            for ((id, kind, mime, filename) in cases) {
+                execSQL("INSERT INTO items(id,title,content,kind,isFavorite,isTrash,trashTimestamp,createdAt,sourceDate,isReminderDone,isReminderExact,isReminderDateOnly,contentHash,originalFileName,mimeType,fileSizeBytes,extractedText,localIndexCoverage,localIndexVersion,aiDescription,aiConcepts,aiStatus) VALUES(?,? ,?, ?,1,0,456,123,99,0,1,0,?,?,?,42,?,'COMPLETE',7,'description','concepts','READY')", arrayOf(id, "Animation $id", "Owner text ".repeat(1000), kind, id, filename, mime, "searchableocr $id"))
+                execSQL("INSERT INTO assets VALUES(?,?,42,?,?,?,2)", arrayOf(id, "assets/$id", filename, mime, kind))
+                execSQL("INSERT INTO search_documents VALUES(?,?,3,4,'preserved chunk','[0.1,0.2]',2,'synthetic-model','COMPLETE')", arrayOf("chunk-$id", id))
+            }
+            execSQL("INSERT INTO collections VALUES('folder','Preserved folder','folder','#ffffff',1,NULL)")
+            execSQL("INSERT INTO item_collection_cross_ref VALUES('legacy','folder')")
+            execSQL("INSERT INTO privacy_migration_memberships VALUES('legacy','private-folder')")
+            execSQL("INSERT INTO items_fts(items_fts) VALUES('rebuild')")
+            for (table in listOf("items", "assets", "search_documents", "collections", "item_collection_cross_ref", "privacy_migration_memberships")) before[table] = snapshot(this, table)
+        }
+        helper.close()
+        val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
+            .addMigrations(MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
+        try {
+            val db = migrated.openHelper.writableDatabase
+            for ((table, rows) in before) assertEquals("$table metadata changed", rows, snapshot(db, table))
+            val dao = migrated.libraryDao()
+            for ((id, kind) in cases) {
+                val expected = if (id in setOf("legacy", "mime", "filename")) "VIDEO" else kind
+                assertEquals(expected, dao.getItemById(id)!!.kind)
+                assertEquals(expected, dao.getAssetByHash(id)!!.kind)
+            }
+            assertEquals(cases.size, dao.searchFts(SearchQuery.fts("searchableocr")!!).size)
+            db.execSQL("INSERT INTO items_fts(items_fts) VALUES('integrity-check')")
+        } finally { migrated.close(); context.deleteDatabase(name) }
+    }
+
     @Test fun version6UpgradeRebuildsUnicodeIndexAndPreservesFullRowsAndMetadata() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "migration6_${java.util.UUID.randomUUID()}.db"
@@ -50,7 +112,7 @@ class LibraryMigrationTest {
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.TRUNCATE)
-            .addMigrations(MIGRATION_6_7).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_6_7, MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
         try {
             val dao = migrated.libraryDao()
             assertEquals(fullBody, dao.getItemById("item")!!.content)
@@ -99,14 +161,14 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_5_6, MIGRATION_6_7).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
         try {
             val repository = LibraryRepository(context, migrated)
             val dao = repository.dao
             assertEquals(listOf("older"), dao.getCollectionIdsForItem("item"))
             assertEquals(2, dao.getPrivacyMigrationMemberships().size)
             assertEquals("STICKER", dao.getItemById("item")!!.kind)
-            assertEquals("GIF", dao.getItemById("gif")!!.kind)
+            assertEquals("VIDEO", dao.getItemById("gif")!!.kind)
             assertEquals("Owner body", dao.getItemById("item")!!.content)
             assertEquals("STICKER", dao.getAssetByHash("hash")!!.kind)
             assertEquals(1, dao.getAssetByHash("hash")!!.refCount)
@@ -154,7 +216,7 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
         try {
             val dao = migrated.libraryDao()
             assertNull(dao.getAllCollections().single { it.id == "legacy" }.appRole)

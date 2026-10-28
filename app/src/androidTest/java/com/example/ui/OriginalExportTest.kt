@@ -23,7 +23,7 @@ class OriginalExportTest {
         val source = java.io.File(app.filesDir, "storage_root/blobs/synthetic-original.bin")
         source.parentFile!!.mkdirs()
         for ((name, mime, kind) in listOf(
-            Triple("synthetic-birthday.gif", "image/gif", "GIF"),
+            Triple("synthetic-birthday.gif", "image/gif", "VIDEO"),
             Triple("synthetic-photo.jpg", "image/jpeg", "PHOTO"),
             Triple("synthetic-image.png", "image/png", "PHOTO"),
             Triple("synthetic-sticker.webp", "image/webp", "STICKER"),

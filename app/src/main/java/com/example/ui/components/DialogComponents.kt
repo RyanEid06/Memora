@@ -207,7 +207,7 @@ fun ItemDetailsDialog(
 
             // Main Preview Dispatcher
             when {
-                blobFile != null && (item.kind == "PHOTO" || item.kind == "STICKER" || item.kind == "GIF") -> {
+                blobFile != null && usesImagePreview(item) -> {
                     AsyncImage(
                         model = blobFile,
                         contentDescription = item.title,

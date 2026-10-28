@@ -637,6 +637,17 @@ val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
     }
 }
 
+/** Category-only migration: preserve original containers, metadata and the derived text index. */
+val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        val mime = "lower(trim(CASE WHEN instr(mimeType, ';') > 0 THEN substr(mimeType, 1, instr(mimeType, ';') - 1) ELSE COALESCE(mimeType, '') END))"
+        for ((table, name) in listOf("items" to "originalFileName", "assets" to "originalName")) {
+            val gif = "($mime = 'image/gif' OR ($mime NOT LIKE 'video/%' AND lower(trim(COALESCE($name, ''))) LIKE '%.gif'))"
+            db.execSQL("UPDATE $table SET kind = 'VIDEO' WHERE kind = 'GIF' OR (kind IN ('PHOTO', 'VIDEO', 'FILE') AND $gif)")
+        }
+    }
+}
+
 @Database(
     entities = [
         ItemEntity::class,
@@ -651,7 +662,7 @@ val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
         CollectionDeletionItem::class,
         PrivacyMigrationMembership::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class LibraryRoomDatabase : RoomDatabase() {

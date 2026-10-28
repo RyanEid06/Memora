@@ -248,7 +248,7 @@ private data class VideoMetaPreview(val thumbnail: Bitmap?, val durationFormatte
 @Composable
 fun ItemVideoPreview(item: ItemEntity, blobFile: File?) {
     if (blobFile == null || !blobFile.exists()) return
-    if (item.kind != "VIDEO") return
+    if (item.kind != "VIDEO" || usesImagePreview(item)) return
     val context = LocalContext.current
 
     val metaPreview by produceState<VideoMetaPreview?>(null, blobFile.absolutePath) {

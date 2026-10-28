@@ -3,6 +3,15 @@ package com.personallibrary.core.storage
 import com.personallibrary.core.model.ItemKind
 
 object ContentClassifier {
+    /** The public Video category includes GIFs; their original container still chooses the renderer. */
+    fun isAnimatedGif(mimeType: String?, fileName: String?): Boolean {
+        val mime = resolveMimeType(mimeType, fileName).lowercase().substringBefore(";").trim()
+        return mime == "image/gif" || (!mime.startsWith("video/") && fileName?.trim()?.endsWith(".gif", ignoreCase = true) == true)
+    }
+
+    fun normalizeLegacyKind(kind: String, mimeType: String?, fileName: String?): String =
+        if (kind == "GIF" || (kind in setOf("PHOTO", "VIDEO", "FILE") && isAnimatedGif(mimeType, fileName))) "VIDEO" else kind
+
 
     fun resolveMimeType(mimeType: String?, fileName: String?): String {
         val declared = mimeType?.lowercase()?.substringBefore(";")?.trim().orEmpty()
@@ -30,7 +39,7 @@ object ContentClassifier {
             return ItemKind.STICKER
         }
 
-        if (normalizedMime == "image/gif" || extension == "gif") return ItemKind.GIF
+        if (isAnimatedGif(mimeType, fileName)) return ItemKind.VIDEO
 
         // WebP without explicit sticker hint is classified as PHOTO (spec requirement)
         if (normalizedMime == "image/webp" || extension == "webp") {

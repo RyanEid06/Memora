@@ -212,7 +212,7 @@ class WhatsAppFixtureTest {
     @Test fun androidRuntimeResolvesAbsentAndGenericMediaMimeFamiliesAndManagedKinds() {
         val formats = listOf(
             Triple("jpg", "image/", ItemKind.PHOTO), Triple("png", "image/", ItemKind.PHOTO),
-            Triple("gif", "image/", ItemKind.GIF), Triple("webp", "image/", ItemKind.PHOTO),
+            Triple("gif", "image/", ItemKind.VIDEO), Triple("webp", "image/", ItemKind.PHOTO),
             Triple("mp4", "video/", ItemKind.VIDEO), Triple("mov", "video/", ItemKind.VIDEO),
             Triple("opus", "audio/", ItemKind.AUDIO), Triple("m4a", "audio/", ItemKind.AUDIO)
         )

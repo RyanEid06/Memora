@@ -57,7 +57,7 @@ export interface GeminiProvider {
   }>;
 }
 
-const ALLOWED_TARGET_KINDS = new Set(['PHOTO', 'DOCUMENT', 'AUDIO', 'VIDEO', 'LINK', 'TEXT', 'STICKER', 'GIF']);
+const ALLOWED_TARGET_KINDS = new Set(['PHOTO', 'DOCUMENT', 'AUDIO', 'VIDEO', 'LINK', 'TEXT', 'STICKER']);
 const ALLOWED_MEDIA_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
   'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/m4a'
@@ -566,7 +566,7 @@ Current timestamp: ${nowIso}
 
 Return JSON with:
 - "concepts": at most 20 key search concepts and synonyms, each at most 60 characters. Expand common abbreviations in both directions (birthday and bday), while retaining names and specific terms from the query.
-- "targetKinds": list of targeted item kinds (only from: "PHOTO", "DOCUMENT", "AUDIO", "VIDEO", "LINK", "TEXT", "STICKER", "GIF") or empty list if any
+- "targetKinds": list of targeted item kinds (only from: "PHOTO", "DOCUMENT", "AUDIO", "VIDEO", "LINK", "TEXT", "STICKER") or empty list if any
 - "dateRange": { "startIso": string or null, "endIso": string or null }
 `;
 
@@ -589,7 +589,7 @@ Return JSON with:
         : [query];
 
       const targetKinds = Array.isArray(parsed.targetKinds)
-        ? [...new Set<string>(parsed.targetKinds.slice(0, 20).filter((k: any) => typeof k === 'string' && ALLOWED_TARGET_KINDS.has(k.toUpperCase())).map((k: string) => k.toUpperCase()))]
+        ? [...new Set<string>(parsed.targetKinds.slice(0, 20).filter((k: any) => typeof k === 'string').map((k: string) => k.toUpperCase() === 'GIF' ? 'VIDEO' : k.toUpperCase()).filter((k: string) => ALLOWED_TARGET_KINDS.has(k)))]
         : [];
 
       let startIso: string | null = null;
@@ -674,7 +674,7 @@ function parseLocalSearchPlan(query: string) {
 
   if (lower.includes('photo') || lower.includes('screenshot')) targetKinds.push('PHOTO');
   if (lower.includes('sticker')) targetKinds.push('STICKER');
-  if (lower.includes('gif')) targetKinds.push('GIF');
+  if (lower.includes('gif')) targetKinds.push('VIDEO');
   if (lower.includes('link') || lower.includes('url')) targetKinds.push('LINK');
   if (lower.includes('audio') || lower.includes('voice')) targetKinds.push('AUDIO');
   if (lower.includes('document') || lower.includes('pdf')) targetKinds.push('DOCUMENT');
@@ -692,7 +692,7 @@ function parseLocalSearchPlan(query: string) {
     query,
     provenance: 'LOCAL' as const,
     concepts,
-    targetKinds,
+    targetKinds: [...new Set(targetKinds)],
     dateRange: { startIso: null, endIso: null }
   };
 }

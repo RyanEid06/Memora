@@ -10,13 +10,19 @@ import kotlin.math.sqrt
 enum class ItemKind(val displayName: String) {
     PHOTO("Photos"),
     STICKER("Stickers"),
+    // Legacy serialized backup value. New storage and public UI use VIDEO.
     GIF("GIFs"),
     VIDEO("Videos"),
     AUDIO("Audio"),
     TEXT("Notes & Text"),
     LINK("Links"),
     DOCUMENT("Documents"),
-    FILE("Other Files")
+    FILE("Other Files");
+
+    companion object {
+        val publicKinds: List<ItemKind> = entries.filterNot { it == GIF }
+        fun canonicalName(kind: String): String = if (kind.equals("GIF", ignoreCase = true)) VIDEO.name else kind
+    }
 }
 
 @Serializable

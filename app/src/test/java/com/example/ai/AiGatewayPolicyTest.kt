@@ -239,6 +239,18 @@ class AiGatewayPolicyTest {
         assertEquals("Exactly one last-moment guard per actual HTTP dispatch", 4, guards)
     }
 
+    @Test fun legacyRemoteGifSearchPlanTargetsVideoWithoutDuplicateKinds() = runBlocking {
+        setAiTestNetwork(context, unmetered = true)
+        answer = { 200 to """{"query":"animated", "concepts":[], "targetKinds":["GIF","VIDEO"], "dateRange":{"start":null,"end":null}}""" }
+        assertEquals(listOf("VIDEO"), gateway.getSearchPlan("animated", emptyList()).targetKinds)
+    }
+
+    @Test fun localGifAndVideoSearchTargetsOnePublicVideoKind() = runBlocking {
+        setAiTestNetwork(context, unmetered = true)
+        answer = { 503 to "unavailable" }
+        assertEquals(listOf("VIDEO"), gateway.getSearchPlan("gif video", emptyList()).targetKinds)
+    }
+
     @Test fun searchPlanDoesNotSwallowCancellationOrPolicyBlocks() = runBlocking {
         try {
             gateway.getSearchPlan("synthetic question", emptyList(), beforeRequest = { throw CancellationException("Synthetic cancellation") })

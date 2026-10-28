@@ -18,10 +18,30 @@ class OwnerFeedbackMediaAndBackupTest {
         assertEquals("PHOTO", ContentClassifier.classify("image/webp", "holiday.webp").name)
     }
 
-    @Test fun identifiableGifHasItsOwnTypeButAnAmbiguousMp4StaysVideo() {
-        assertEquals("GIF", ContentClassifier.classify("image/gif", "animation.gif").name)
-        assertEquals("GIF", ContentClassifier.classify(null, "GIF-20261024.gif").name)
+    @Test fun animatedGifAndWhatsAppMp4ShareTheVideoCategory() {
+        assertEquals("VIDEO", ContentClassifier.classify("image/gif", "animation.gif").name)
+        assertEquals("VIDEO", ContentClassifier.classify(null, "GIF-20261024.gif").name)
         assertEquals("VIDEO", ContentClassifier.classify("video/mp4", "animation.mp4").name)
+        assertEquals("VIDEO", ContentClassifier.classify("IMAGE/GIF; charset=binary", "extensionless").name)
+        assertEquals("VIDEO", ContentClassifier.classify("application/octet-stream", "ANIMATION.GIF").name)
+        assertEquals("PHOTO", ContentClassifier.classify("image/png", "animation.png").name)
+    }
+
+    @Test fun gifWireValueRemainsReadableButIsAbsentFromPublicKinds() {
+        assertEquals("GIF", com.personallibrary.core.model.ItemKind.valueOf("GIF").name)
+        assertFalse(com.personallibrary.core.model.ItemKind.publicKinds.any { it.name == "GIF" })
+        assertEquals("VIDEO", com.personallibrary.core.model.ItemKind.canonicalName("GIF"))
+    }
+
+    @Test fun videoCategoryChoosesItsRendererFromTheOriginalContainer() {
+        assertTrue(ContentClassifier.isAnimatedGif("IMAGE/GIF; charset=binary", "unknown"))
+        assertTrue(ContentClassifier.isAnimatedGif(null, "animation.GIF"))
+        assertTrue(ContentClassifier.isAnimatedGif("application/octet-stream", "animation.gif"))
+        assertFalse(ContentClassifier.isAnimatedGif("video/mp4", "whatsapp-gif.mp4"))
+        assertFalse(ContentClassifier.isAnimatedGif("video/mp4", "misnamed.gif"))
+        assertEquals("VIDEO", ContentClassifier.normalizeLegacyKind("GIF", "image/gif", "animation.gif"))
+        assertEquals("VIDEO", ContentClassifier.normalizeLegacyKind("PHOTO", "IMAGE/GIF; charset=binary", "unknown"))
+        assertEquals("STICKER", ContentClassifier.normalizeLegacyKind("STICKER", "image/webp", "sticker.webp"))
     }
 
     @Test fun eightCharacterPasswordEncryptsAndSevenDoesNot() {

@@ -183,7 +183,7 @@ class AiQueuePrivacyTest {
             assertEquals(listOf("/v1/auth/challenge"), requests)
             requests.clear()
             val database = androidx.room.Room.databaseBuilder(context, com.example.data.LibraryRoomDatabase::class.java,
-                "personal_library_room.db").addMigrations(com.example.data.MIGRATION_5_6, com.example.data.MIGRATION_6_7).addCallback(com.example.data.DATABASE_CALLBACK).build()
+                "personal_library_room.db").addMigrations(com.example.data.MIGRATION_5_6, com.example.data.MIGRATION_6_7, com.example.data.MIGRATION_7_8).addCallback(com.example.data.DATABASE_CALLBACK).build()
             try {
                 database.openHelper.writableDatabase.execSQL("INSERT INTO privacy_migration_memberships VALUES(?, ?)", arrayOf(item.id, "old-private"))
                 context.getSharedPreferences("personal_library_settings", 0).edit().putStringSet("excluded_collections", setOf("old-private")).commit()

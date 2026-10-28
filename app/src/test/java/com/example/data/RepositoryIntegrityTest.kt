@@ -219,6 +219,50 @@ class RepositoryIntegrityTest {
         return RestorePreview(manifest, stage, 1, 1, 1, 0)
     }
 
+    @Test fun legacyGifEncryptedArchiveDecodesAndRestoresAsVideoWithoutChangingItsOriginal() = legacyGifArchiveRoundTrip(false)
+
+    @Test fun legacyGifArchiveRecoversMissingOriginalMetadataFromItsAsset() = legacyGifArchiveRoundTrip(true)
+
+    private fun legacyGifArchiveRoundTrip(missingItemMetadata: Boolean) = runBlocking {
+        val bytes = "GIF89a synthetic legacy original".toByteArray()
+        val staged = preview(bytes)
+        val manifest = staged.manifest.copy(
+            items = staged.manifest.items.map { it.copy(kind = ItemKind.GIF, isFavorite = true, isTrash = true,
+                trashTimestamp = 123L, originalFileName = if (missingItemMetadata) null else "legacy.gif",
+                mimeType = if (missingItemMetadata) null else "image/gif") },
+            assets = staged.manifest.assets.map { it.copy(kind = "GIF", originalName = "legacy.gif", mimeType = "image/gif") }
+        )
+        val archive = File.createTempFile("legacy-gif-", ".plb", context.cacheDir)
+        val exported = File.createTempFile("video-roundtrip-", ".plb", context.cacheDir)
+        try {
+            archive.outputStream().use { out -> EncryptedBackupEngine().exportArchive(out, "synthetic-gif-pass".toCharArray(), manifest) {
+                File(staged.stagingDir, "assets/$it")
+            } }
+            val inspected = repository.inspectBackup(android.net.Uri.fromFile(archive), "synthetic-gif-pass".toCharArray())!!
+            assertEquals("The legacy wire enum must still decode", ItemKind.GIF, inspected.manifest.items.single().kind)
+            assertEquals(1, repository.commitRestore(inspected))
+            val restored = repository.dao.getItemById("restored")!!
+            assertEquals("VIDEO", restored.kind)
+            assertEquals("VIDEO", repository.dao.getAssetByHash(hash(bytes))!!.kind)
+            assertEquals("image/gif", restored.mimeType)
+            assertEquals("legacy.gif", restored.originalFileName)
+            assertTrue(restored.isFavorite && restored.isTrash)
+            assertEquals(123L, restored.trashTimestamp)
+            assertArrayEquals(bytes, repository.assetStore.getBlobFile(hash(bytes))!!.readBytes())
+            assertTrue(repository.exportEncryptedBackup(android.net.Uri.fromFile(exported), "synthetic-gif-pass".toCharArray()))
+            val roundTrip = repository.inspectBackup(android.net.Uri.fromFile(exported), "synthetic-gif-pass".toCharArray())!!
+            try {
+                assertEquals(ItemKind.VIDEO, roundTrip.manifest.items.single().kind)
+                assertEquals("VIDEO", roundTrip.manifest.assets.single().kind)
+                assertEquals("image/gif", roundTrip.manifest.assets.single().mimeType)
+            } finally { repository.discardRestorePreview(roundTrip) }
+        } finally {
+            archive.delete(); exported.delete()
+            require(staged.stagingDir.name.startsWith("restore_test_") && staged.stagingDir.parentFile.canonicalFile == context.cacheDir.canonicalFile)
+            staged.stagingDir.deleteRecursively()
+        }
+    }
+
     @Test fun restoreTransactionFailureCleansNewlyPublishedBlob() = runBlocking {
         val bytes = "restore rollback original".toByteArray()
         val preview = preview(bytes)

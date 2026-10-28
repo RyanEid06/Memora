@@ -47,6 +47,14 @@ class LocalSearchQueryContractTest {
 
     private fun ids(request: LibrarySearchRequest): List<String> = rows(request).map { it.item.id }
 
+    @Test fun videoFilterReturnsBothAnimatedGifAndMp4Originals() = runBlocking {
+        dao.insertItem(ItemEntity("gif", "Animation", "", "VIDEO", mimeType = "image/gif", originalFileName = "animation.gif"))
+        dao.insertItem(ItemEntity("mp4", "Animation", "", "VIDEO", mimeType = "video/mp4", originalFileName = "animation.mp4"))
+        dao.insertItem(ItemEntity("photo", "Photo", "", "PHOTO", mimeType = "image/jpeg"))
+        assertEquals(setOf("gif", "mp4"), ids(LibrarySearchRequest(kind = "VIDEO")).toSet())
+        assertEquals(setOf("gif", "mp4"), ids(LibrarySearchRequest(query = "Animation", kind = "VIDEO")).toSet())
+    }
+
     @Test fun unicodePunctuationUsesTheSameTokenBoundariesInIndexAndQuery() = runBlocking {
         dao.insertItem(ItemEntity("arabic", "مرحبا،بالعالم", "", "TEXT"))
         dao.insertItem(ItemEntity("english", "first—second", "", "TEXT"))

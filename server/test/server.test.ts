@@ -630,10 +630,10 @@ describe('Search plan provenance', () => {
     assert.deepStrictEqual(plan.targetKinds, ['TEXT']);
   });
 
-  test('Gemini plan accepts GIF as its own kind', async () => {
+  test('Gemini plan normalizes legacy GIF to the Video category', async () => {
     const provider = new SdkGeminiProvider('synthetic-key', 'test-generation', 'test-embedding');
-    (provider as any).ai = { models: { generateContent: async () => ({ text: JSON.stringify({ concepts: ['animated'], targetKinds: ['GIF'] }) }) } };
-    assert.deepStrictEqual((await provider.searchPlan('animated GIF', [], '2026-10-24T00:00:00Z')).targetKinds, ['GIF']);
+    (provider as any).ai = { models: { generateContent: async () => ({ text: JSON.stringify({ concepts: ['animated'], targetKinds: ['GIF', 'VIDEO'] }) }) } };
+    assert.deepStrictEqual((await provider.searchPlan('animated GIF', [], '2026-10-24T00:00:00Z')).targetKinds, ['VIDEO']);
   });
   test('SDK analysis keeps PDF text bounded and forwards bounded audio with its MIME', async () => {
     const provider = new SdkGeminiProvider('synthetic-key', 'test-generation', 'test-embedding');
