@@ -28,6 +28,8 @@ class FtsOpenMaintenanceTest {
 
     @Before fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         db = open()
     }
     @After fun close() { db.close(); context.deleteDatabase(name) }

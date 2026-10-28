@@ -23,6 +23,8 @@ class LibraryRepositoryTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         repository = LibraryRepository(context)
     }
 

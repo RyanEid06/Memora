@@ -83,6 +83,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _collections = MutableStateFlow<List<CollectionEntity>>(emptyList())
     val collections: StateFlow<List<CollectionEntity>> = _collections.asStateFlow()
+    val collectionItemCounts = repository.observeCollectionItemCounts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val _trashItems = MutableStateFlow<List<ItemEntity>>(emptyList())
     val trashItems: StateFlow<List<ItemEntity>> = _trashItems.asStateFlow()

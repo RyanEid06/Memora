@@ -47,6 +47,7 @@ fun CollectionsScreen(
 ) {
     val collections by viewModel.collections.collectAsState()
     val allItems by viewModel.items.collectAsState()
+    val collectionItemCounts by viewModel.collectionItemCounts.collectAsState()
     val snackbarHost = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.libraryMessages.collect { snackbarHost.showSnackbar(it, withDismissAction = true) }
@@ -156,7 +157,7 @@ fun CollectionsScreen(
 
             // User Collections
             items(collections, key = { it.id }) { col ->
-                val count = allItems.count { itemWithCols -> itemWithCols.collections.any { it.id == col.id } }
+                val count = collectionItemCounts[col.id] ?: 0
                 var showPrivacy by remember { mutableStateOf(false) }
                 var excluded by remember(col.id, showPrivacy) { mutableStateOf(viewModel.isCollectionExcludedFromAi(col.id)) }
                 if (showPrivacy) {

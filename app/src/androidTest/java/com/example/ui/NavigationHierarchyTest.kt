@@ -217,6 +217,7 @@ class NavigationHierarchyTest {
         val id = seed()
         val title = "Synthetic navigation $id"
         compose.runOnUiThread {
+            vm.setLibraryLayout(LibraryLayout.LIST)
             vm.setSearchQuery(id)
             compose.activity.setContent {
                 val density = LocalDensity.current.density

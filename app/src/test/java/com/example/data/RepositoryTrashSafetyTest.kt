@@ -25,6 +25,8 @@ class RepositoryTrashSafetyTest {
 
     @Before fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         database = Room.inMemoryDatabaseBuilder(context, LibraryRoomDatabase::class.java).addCallback(DATABASE_CALLBACK).build()
         repository = LibraryRepository(context, database)

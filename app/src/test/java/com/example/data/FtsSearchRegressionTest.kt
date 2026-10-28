@@ -23,6 +23,8 @@ class FtsSearchRegressionTest {
 
     @Before fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         context.getSharedPreferences("personal_library_settings", 0).edit().clear()
             .putBoolean("ai_paused", true).commit()
         db = Room.inMemoryDatabaseBuilder(context, LibraryRoomDatabase::class.java)

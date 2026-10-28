@@ -67,6 +67,10 @@ data class ItemCollectionCrossRef(
     val collectionId: String
 )
 
+data class CollectionItemCount(val collectionId: String, val itemCount: Int)
+data class ItemDeletionCandidate(val id: String, val contentHash: String?)
+data class AssetReferenceCount(val hash: String, val referenceCount: Int)
+
 @Entity(tableName = "reminders")
 data class ReminderEntity(
     @PrimaryKey val id: String,
@@ -200,6 +204,12 @@ interface LibraryDao {
     @Query("SELECT * FROM items")
     suspend fun getAllItemsIncludingTrash(): List<ItemEntity>
 
+    @Query("SELECT id FROM items")
+    suspend fun getAllItemIds(): List<String>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM items WHERE id IN (:ids) AND isTrash = 0 AND (aiStatus = 'PENDING' OR localIndexCoverage = 'PENDING'))")
+    suspend fun hasPendingLocalIndexItems(ids: List<String>): Boolean
+
     @Query("SELECT * FROM items WHERE id = :id LIMIT 1")
     suspend fun getItemById(id: String): ItemEntity?
 
@@ -220,6 +230,27 @@ interface LibraryDao {
 
     @Query("DELETE FROM items WHERE id = :id")
     suspend fun deleteItemPermanently(id: String)
+
+    @Query("SELECT id FROM items WHERE isTrash = 1 AND (:before IS NULL OR COALESCE(trashTimestamp, createdAt) < :before)")
+    suspend fun getTrashItemIds(before: Long? = null): List<String>
+
+    @Query("SELECT id, contentHash FROM items WHERE id IN (:ids) AND (:requireTrash = 0 OR isTrash = 1) AND (:before IS NULL OR COALESCE(trashTimestamp, createdAt) < :before)")
+    suspend fun getDeletionCandidates(ids: List<String>, requireTrash: Boolean, before: Long?): List<ItemDeletionCandidate>
+
+    @Query("DELETE FROM items WHERE id IN (:ids)")
+    suspend fun deleteItemsPermanently(ids: List<String>)
+
+    @Query("DELETE FROM item_collection_cross_ref WHERE itemId IN (:ids)")
+    suspend fun deleteItemMemberships(ids: List<String>)
+
+    @Query("DELETE FROM reminders WHERE itemId IN (:ids)")
+    suspend fun deleteItemReminders(ids: List<String>)
+
+    @Query("DELETE FROM search_documents WHERE itemId IN (:ids)")
+    suspend fun deleteItemSearchDocuments(ids: List<String>)
+
+    @Query("DELETE FROM analysis_jobs WHERE itemId IN (:ids)")
+    suspend fun deleteItemAnalysisJobs(ids: List<String>)
 
     @Query("UPDATE items SET reminderTime = :reminderTime, isReminderDone = 0, isReminderExact = :isExact, isReminderDateOnly = :isDateOnly, reminderLocalDate = :localDate WHERE id = :id")
     suspend fun setReminder(id: String, reminderTime: Long?, isExact: Boolean = true, isDateOnly: Boolean = false, localDate: String? = null)
@@ -252,9 +283,27 @@ interface LibraryDao {
     @Query("DELETE FROM assets WHERE hash = :hash")
     suspend fun deleteAsset(hash: String)
 
+    @Query("SELECT contentHash AS hash, COUNT(*) AS referenceCount FROM items WHERE contentHash IS NOT NULL GROUP BY contentHash")
+    suspend fun getAssetReferenceCounts(): List<AssetReferenceCount>
+
+    @Query("UPDATE assets SET refCount = :count WHERE hash = :hash")
+    suspend fun setAssetReferenceCount(hash: String, count: Int)
+
+    @Query("DELETE FROM assets WHERE hash IN (:hashes)")
+    suspend fun deleteAssets(hashes: List<String>)
+
+    @Query("SELECT hash FROM assets WHERE hash IN (:hashes) UNION SELECT contentHash AS hash FROM items WHERE contentHash IN (:hashes)")
+    suspend fun getReferencedBlobHashes(hashes: List<String>): List<String>
+
     // Collections
     @Query("SELECT * FROM collections WHERE id NOT IN (SELECT collectionId FROM pending_collection_deletions) ORDER BY createdAt ASC")
     fun observeCollections(): Flow<List<CollectionEntity>>
+
+    @Query("""SELECT r.collectionId, COUNT(*) AS itemCount FROM item_collection_cross_ref r
+        JOIN items i ON i.id = r.itemId JOIN collections c ON c.id = r.collectionId
+        WHERE i.isTrash = 0 AND c.id NOT IN (SELECT collectionId FROM pending_collection_deletions)
+        GROUP BY r.collectionId""")
+    fun observeCollectionItemCounts(): Flow<List<CollectionItemCount>>
 
     @Query("SELECT * FROM collections WHERE id NOT IN (SELECT collectionId FROM pending_collection_deletions) ORDER BY createdAt ASC")
     suspend fun getAllCollections(): List<CollectionEntity>
@@ -302,6 +351,9 @@ interface LibraryDao {
 
     @Query("SELECT collectionId FROM item_collection_cross_ref WHERE itemId = :itemId")
     suspend fun getCollectionIdsForItem(itemId: String): List<String>
+
+    @Query("SELECT * FROM item_collection_cross_ref ORDER BY itemId, collectionId")
+    suspend fun getAllMemberships(): List<ItemCollectionCrossRef>
 
     @Transaction
     @Query("SELECT * FROM items WHERE isTrash = 0 ORDER BY createdAt DESC")

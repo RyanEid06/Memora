@@ -24,6 +24,8 @@ class RoomDatabaseAndFtsTest {
     @Before
     fun createDb() {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         db = Room.inMemoryDatabaseBuilder(context, LibraryRoomDatabase::class.java)
             .allowMainThreadQueries()
             .addCallback(DATABASE_CALLBACK)

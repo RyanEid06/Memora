@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.room.Room
 import androidx.room.withTransaction
+import androidx.work.await
 import com.example.indexing.LocalIndexer
 import com.example.indexing.DurableAiWorker
 import com.example.reminder.ReminderScheduler
@@ -24,6 +25,7 @@ import com.personallibrary.core.storage.ManagedAssetStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
@@ -44,10 +46,9 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
     }
 
     private suspend fun removeUnreferencedBlobs(hashes: Collection<String>) = withContext(NonCancellable + Dispatchers.IO) {
-        for (hash in hashes) {
-            if (dao.getAssetByHash(hash) == null && dao.getAllItemsIncludingTrash().none { it.contentHash == hash }) {
-                assetStore.deleteBlob(hash)
-            }
+        for (batch in hashes.distinct().chunked(400)) {
+            val referenced = dao.getReferencedBlobHashes(batch).toHashSet()
+            batch.filterNot { it in referenced }.forEach(assetStore::deleteBlob)
         }
     }
 
@@ -66,6 +67,15 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
     internal suspend fun pendingLocalIndexIds(afterId: String? = null, limit: Int = 32): List<String> {
         require(limit in 1..32) { "Local index batches allow at most 32 IDs" }
         return dao.getPendingLocalIndexIds(afterId, limit)
+    }
+
+    private suspend fun enqueuePendingLocalIndex(ids: Collection<String>) {
+        if (ids.toList().chunked(400).none { dao.hasPendingLocalIndexItems(it) }) return
+        try { com.example.indexing.LocalIndexWorker.enqueue(context).await() }
+        catch (failure: Exception) {
+            // Pending rows survive a failed enqueue and are picked up at the next app startup.
+            android.util.Log.w("MemoraIndex", "local_index_enqueue_failed ${failure.javaClass.simpleName}")
+        }
     }
 
     suspend fun completeOwnerFeedbackMigration() = withContext(Dispatchers.IO) {
@@ -168,7 +178,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
     suspend fun reconcileStorage() = withContext(Dispatchers.IO) {
         completeOwnerFeedbackMigration()
         assetMutations.withLock {
-            val counts = dao.getAllItemsIncludingTrash().mapNotNull { it.contentHash }.groupingBy { it }.eachCount()
+            val counts = dao.getAssetReferenceCounts().associate { it.hash to it.referenceCount }
             db.withTransaction {
                 for (asset in dao.getAllAssets()) {
                     val count = counts[asset.hash] ?: 0
@@ -185,6 +195,9 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
     fun observeTrashItems(): Flow<List<ItemEntity>> = dao.observeTrashItems()
 
     fun observeCollections(): Flow<List<CollectionEntity>> = dao.observeCollections()
+
+    fun observeCollectionItemCounts(): Flow<Map<String, Int>> = dao.observeCollectionItemCounts()
+        .map { rows -> rows.associate { it.collectionId to it.itemCount } }
 
     suspend fun getBlobFile(hash: String): File? = withContext(Dispatchers.IO) {
         assetStore.getBlobFile(hash)
@@ -419,59 +432,57 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         withContext(NonCancellable) {
             val scheduler = ReminderScheduler(context)
             for (id in affected) dao.getItemById(id)?.let { scheduler.scheduleRestored(it, dao.getReminderByItemId(id)) }
+            enqueuePendingLocalIndex(affected)
         }
         affected
     }
 
-    suspend fun deletePermanently(id: String, requireTrash: Boolean = false) = withContext(Dispatchers.IO) {
+    suspend fun deletePermanently(id: String, requireTrash: Boolean = false) =
+        deletePermanently(listOf(id), requireTrash)
+
+    private suspend fun deletePermanently(ids: Collection<String>, requireTrash: Boolean, before: Long? = null) = withContext(Dispatchers.IO) {
         assetMutations.withLock {
-        var orphanHash: String? = null
-        var deleted = false
-        db.withTransaction {
-        val item = dao.getItemById(id)
-        if (item != null && (!requireTrash || item.isTrash)) {
-            val hash = item.contentHash
-            if (hash != null) {
-                val asset = dao.getAssetByHash(hash)
-                if (asset != null) {
-                    val newCount = asset.refCount - 1
-                    if (newCount <= 0) {
-                        dao.deleteAsset(hash)
-                        orphanHash = hash
-                    } else {
-                        dao.updateAsset(asset.copy(refCount = newCount))
-                    }
+            val deletedIds = mutableListOf<String>()
+            val affectedHashes = mutableSetOf<String>()
+            db.withTransaction {
+                for (batch in ids.distinct().chunked(400)) {
+                    val candidates = dao.getDeletionCandidates(batch, requireTrash, before)
+                    val currentIds = candidates.map { it.id }
+                    if (currentIds.isEmpty()) continue
+                    affectedHashes += candidates.mapNotNull { it.contentHash }
+                    dao.deleteItemMemberships(currentIds)
+                    dao.deleteItemReminders(currentIds)
+                    dao.deleteItemSearchDocuments(currentIds)
+                    dao.deleteItemAnalysisJobs(currentIds)
+                    dao.deleteItemsPermanently(currentIds)
+                    deletedIds += currentIds
                 }
+                // Group remaining references once; a correlated count per hash would rescan items.
+                val counts = if (affectedHashes.isEmpty()) emptyMap() else
+                    dao.getAssetReferenceCounts().associate { it.hash to it.referenceCount }
+                val unreferenced = mutableListOf<String>()
+                for (hash in affectedHashes) {
+                    val count = counts[hash] ?: 0
+                    if (count == 0) unreferenced += hash else dao.setAssetReferenceCount(hash, count)
+                }
+                unreferenced.chunked(400).forEach { dao.deleteAssets(it) }
             }
-            dao.removeAllCollectionsForItem(id)
-            dao.deleteReminderByItemId(id)
-            dao.deleteSearchDocumentsForItem(id)
-            dao.deleteAnalysisJob(id)
-            dao.deleteItemPermanently(id)
-            deleted = true
-        }
-        }
-        orphanHash?.let { removeUnreferencedBlobs(listOf(it)) }
-        if (deleted) ReminderScheduler(context).cancel(id)
+            // Metadata has committed; cancellation must not leave deleted-item alarms or orphan blobs.
+            withContext(NonCancellable) {
+                removeUnreferencedBlobs(affectedHashes)
+                val scheduler = ReminderScheduler(context)
+                deletedIds.forEach(scheduler::cancel)
+            }
         }
     }
 
     suspend fun emptyTrash() = withContext(Dispatchers.IO) {
-        val trash = dao.observeTrashItems().first()
-        for (item in trash) {
-            deletePermanently(item.id, requireTrash = true)
-        }
+        deletePermanently(dao.getTrashItemIds(), requireTrash = true)
     }
 
     suspend fun purgeExpiredTrash(maxAgeDays: Int = 30) = withContext(Dispatchers.IO) {
-        val trash = dao.observeTrashItems().first()
         val cutoff = System.currentTimeMillis() - (maxAgeDays * 24 * 60 * 60 * 1000L)
-        for (item in trash) {
-            val ts = item.trashTimestamp ?: item.createdAt
-            if (ts < cutoff) {
-                deletePermanently(item.id, requireTrash = true)
-            }
-        }
+        deletePermanently(dao.getTrashItemIds(cutoff), requireTrash = true, before = cutoff)
     }
 
     suspend fun setReminder(
@@ -537,12 +548,12 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         return trimmed
     }
 
-    private fun restoredCollectionName(name: String, existing: List<CollectionEntity>): String {
+    private fun restoredCollectionName(name: String, existingNames: Set<String>): String {
         val base = name.trim().ifBlank { "Restored collection" }
         var candidate = base
         var suffix = 2
         while (reservedCollectionNames.any { it.equals(candidate, true) } ||
-            existing.any { it.name.trim().equals(candidate, true) }) {
+            candidate in existingNames) {
             candidate = "$base (restored ${suffix++})"
         }
         return candidate
@@ -670,13 +681,10 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         val allAssets = dao.getAllAssets()
         val allReminders = dao.getAllReminders()
 
-        val memberships = mutableListOf<BackupMembershipRecord>()
-        for (item in allItems) {
-            val colIds = dao.getCollectionIdsForItem(item.id)
-            for (cid in colIds.filter { id -> allCols.any { it.id == id } }) {
-                memberships.add(BackupMembershipRecord(item.id, cid))
-            }
-        }
+        val itemIds = allItems.mapTo(HashSet()) { it.id }
+        val collectionIds = allCols.mapTo(HashSet()) { it.id }
+        val memberships = dao.getAllMemberships().filter { it.itemId in itemIds && it.collectionId in collectionIds }
+            .map { BackupMembershipRecord(it.itemId, it.collectionId) }
 
         BackupManifest(
             items = allItems.map {
@@ -753,7 +761,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
         var preview: RestorePreview? = null
         return try {
             withContext(Dispatchers.IO) {
-                val existingIds = dao.getAllItemsIncludingTrash().map { it.id }.toSet()
+                val existingIds = dao.getAllItemIds().toHashSet()
                 preview = context.contentResolver.openInputStream(uri)?.use { inStream ->
                     restoreStaging.inspect(inStream, passphrase, existingIds)
                 }
@@ -774,26 +782,30 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
     }
 
     /**
-     * Commits a staged restore preview atomically:
+     * Publishes validated staged blobs, then commits restore metadata transactionally.
+     * Startup reconciliation removes abandoned blobs if killed before the metadata commit.
      * - Respects keepBoth policy (Skip Existing vs Keep Both)
      * - When Skip Existing: existing items, memberships, and reminders remain untouched.
      * - When Keep Both: colliders get newly allocated IDs and are imported alongside existing items.
      * - External alarm scheduling occurs strictly AFTER database transaction succeeds.
-     * - Re-indexes newly imported items.
+     * - Persists pending indexing in the transaction; schedules work after releasing the asset lock.
      */
     suspend fun commitRestore(preview: RestorePreview, keepBoth: Boolean = false): Int = withContext(Dispatchers.IO) {
-        assetMutations.withLock {
-        val existingIds = dao.getAllItemsIncludingTrash().map { it.id }.toSet()
-        var importedCount = 0
-        val itemsToReindex = mutableListOf<ItemEntity>()
+        val importedIds = mutableListOf<String>()
         val remindersToSchedule = mutableListOf<Pair<ReminderEntity, Long>>()
+        try {
+        assetMutations.withLock {
+        val sourceItemIds = preview.manifest.items.mapTo(HashSet()) { it.id }
+        var importedCount = 0
         val publishedHashes = mutableListOf<String>()
         val storedAssets = mutableMapOf<String, com.personallibrary.core.model.StoredAsset>()
         val collectionRemap = mutableMapOf<String, String>()
 
         try {
+            val existingIds = dao.getAllItemIds().toHashSet()
             // 1. Physically import asset blobs into ManagedAssetStore
             for (asset in preview.manifest.assets) {
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 val stagedFile = File(preview.stagingDir, "assets/${asset.hash}")
                 if (!stagedFile.isFile) throw IOException("Missing staged original: ${asset.hash}")
                 val wasPresent = assetStore.getBlobFile(asset.hash) != null
@@ -818,12 +830,16 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
 
             // 2. Perform database transaction atomically
             db.withTransaction {
+                val collectionsById = dao.getAllStoredCollections().associateBy { it.id }.toMutableMap()
+                val assetsByHash = dao.getAllAssets().associateBy { it.hash }
+                val collectionNames = java.util.TreeSet(String.CASE_INSENSITIVE_ORDER)
+                    .apply { addAll(collectionsById.values.map { it.name.trim() }) }
+                val hidden = dao.getPendingCollectionDeletions().mapTo(HashSet()) { it.collectionId }
                 // Collections: insert or reuse
                 for (col in preview.manifest.collections) {
-                    val all = dao.getAllStoredCollections()
-                    val hidden = dao.getPendingCollectionDeletions().map { it.collectionId }.toSet()
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val role: String? = null // Legacy default roles are ordinary folders in the new model.
-                    var existing = all.find { it.id == col.id }
+                    var existing = collectionsById[col.id]
                     // Portable identity survives collision-safe restore names and later owner edits.
                     // A different immutable creation timestamp or role means the ID collides with another collection.
                     fun samePortableIdentity(candidate: CollectionEntity) = candidate.id !in hidden && candidate.appRole == role && candidate.createdAt == col.createdAt
@@ -837,17 +853,24 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                         do {
                             val identity = "memora.restore.collection.v1|${col.id.length}:${col.id}|${col.createdAt}|$portableRole|${salt++}"
                             finalId = UUID.nameUUIDFromBytes(identity.toByteArray(Charsets.UTF_8)).toString()
-                            existing = all.find { it.id == finalId }
+                            existing = collectionsById[finalId]
                         } while (existing != null && !samePortableIdentity(existing))
                         // A previous collision may already have been remapped even after its owner was deleted.
                         // Use the free original ID only when no matching remapped identity was found.
                         if (existing == null && sourceIdAvailable) finalId = col.id
                     }
                     collectionRemap[col.id] = finalId
-                    if (existing == null) dao.insertCollection(CollectionEntity(finalId, restoredCollectionName(col.name, all), col.iconName, col.colorHex, col.createdAt, role))
+                    if (existing == null) {
+                        val name = restoredCollectionName(col.name, collectionNames)
+                        val entity = CollectionEntity(finalId, name, col.iconName, col.colorHex, col.createdAt, role)
+                        dao.insertCollection(entity)
+                        collectionsById[finalId] = entity
+                        collectionNames += name
+                    }
                 }
 
                 for (item in preview.manifest.items) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val isCollision = existingIds.contains(item.id)
                     if (isCollision && !keepBoth) {
                         // Skip Existing: preserve live item, do NOT overwrite
@@ -883,7 +906,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                         aiStatus = "PENDING" // Re-index locally after restore
                     )
                     dao.insertItem(entity)
-                    itemsToReindex.add(entity)
+                    importedIds += finalId
                     importedCount++
                 }
 
@@ -894,24 +917,26 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                     members.minWith(compareBy<BackupMembershipRecord> { sourceCollections.getValue(it.collectionId).createdAt }.thenBy { it.collectionId })
                 }
                 for (mem in singleMemberships) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val finalItemId = idRemap[mem.itemId] ?: mem.itemId
                     // Only insert membership if item was imported or already existed
                     if (existingIds.contains(mem.itemId) && !keepBoth && !idRemap.containsKey(mem.itemId)) {
                         // Under Skip Existing, existing memberships are left unchanged
                         continue
                     }
-                    require(preview.manifest.items.any { it.id == mem.itemId }) { "Unknown membership item" }
+                    require(mem.itemId in sourceItemIds) { "Unknown membership item" }
                     val collectionId = collectionRemap[mem.collectionId] ?: throw IOException("Unknown membership collection")
                     dao.insertItemCollectionCrossRef(ItemCollectionCrossRef(finalItemId, collectionId))
                 }
 
                 // Reminders
                 for (rem in preview.manifest.reminders) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val finalItemId = idRemap[rem.itemId] ?: rem.itemId
                     if (existingIds.contains(rem.itemId) && !keepBoth && !idRemap.containsKey(rem.itemId)) {
                         continue
                     }
-                    require(preview.manifest.items.any { it.id == rem.itemId }) { "Unknown reminder item" }
+                    require(rem.itemId in sourceItemIds) { "Unknown reminder item" }
                     run {
                         val dueMillis = if (rem.isDateOnly) {
                             java.time.LocalDate.parse(rem.localDate ?: throw IOException("Missing reminder local date"))
@@ -935,15 +960,15 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                 }
 
                 // Accurate asset refCounts derived from all live items in database
-                val allLiveItems = dao.getAllItemsIncludingTrash()
-                val liveCounts = allLiveItems.mapNotNull { it.contentHash }.groupingBy { it }.eachCount()
+                val liveCounts = dao.getAssetReferenceCounts().associate { it.hash to it.referenceCount }
 
                 for (asset in preview.manifest.assets) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val count = liveCounts[asset.hash] ?: 0
                     if (count > 0) {
                         val stored = storedAssets.getValue(asset.hash)
                         if (assetStore.getBlobFile(asset.hash)?.isFile != true) throw IOException("Missing restored blob")
-                        val existing = dao.getAssetByHash(asset.hash)
+                        val existing = assetsByHash[asset.hash]
                         if (existing == null) {
                             dao.insertAsset(
                                 AssetEntity(
@@ -961,36 +986,31 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                         }
                     }
                 }
-            }
-
-            // 3. External Alarm Scheduling strictly AFTER Room transaction succeeds
-            val scheduler = ReminderScheduler(context)
-            for ((rem, _) in remindersToSchedule) {
-                dao.getItemById(rem.itemId)?.let { scheduler.scheduleRestored(it, dao.getReminderByItemId(rem.itemId)) }
-            }
-
-            // 4. Rebuild FTS
-            try {
-                dao.rebuildFts()
-            } catch (_: Exception) {}
-
-            // 5. Re-index newly imported items through LocalIndexer
-            val indexer = LocalIndexer(context, this@LibraryRepository)
-            for (it in itemsToReindex) {
-                try {
-                    indexer.indexItem(it)
-                } catch (_: Exception) {}
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
             }
 
         } finally {
-            try { removeUnreferencedBlobs(publishedHashes) } finally {
-                // Hand-built previews are also used by existing transactional restore tests.
-                if (preview.stagingDir.parentFile?.canonicalFile == File(context.cacheDir, "staging").canonicalFile) restoreStaging.discard(preview)
-                else preview.stagingDir.deleteRecursively()
-            }
+            removeUnreferencedBlobs(publishedHashes)
         }
 
         importedCount
+        }
+        } finally {
+            // Even cancellation returning from Room cannot skip committed side effects. Rolled-back
+            // IDs have no canonical rows, and neither alarms nor indexing run under the asset lock.
+            withContext(NonCancellable) {
+                try {
+                    // Also clean up when cancelled while waiting for the asset lock or first SQL read.
+                    if (preview.stagingDir.parentFile?.canonicalFile == File(context.cacheDir, "staging").canonicalFile) restoreStaging.discard(preview)
+                    else preview.stagingDir.deleteRecursively()
+                } finally {
+                val scheduler = ReminderScheduler(context)
+                for ((rem, _) in remindersToSchedule) {
+                    dao.getItemById(rem.itemId)?.let { scheduler.scheduleRestored(it, dao.getReminderByItemId(rem.itemId)) }
+                }
+                enqueuePendingLocalIndex(importedIds)
+                }
+            }
         }
     }
 

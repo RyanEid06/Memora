@@ -26,6 +26,9 @@ class InteractiveAiRetrievalTest {
     private lateinit var retrieval: InteractiveAiRetrieval
 
     @Before fun setup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context,
+            androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         prefs.edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LibraryRoomDatabase::class.java)
             .addCallback(DATABASE_CALLBACK).build()
