@@ -21,11 +21,13 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.ItemWithCollections
 import com.example.model.SharePayload
@@ -73,7 +75,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         }
 
         setContent {
-            val themeMode by viewModel.themeMode.collectAsState()
+            val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
             val darkTheme = themeMode.isDark(isSystemInDarkTheme())
             SideEffect {
                 val bars = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { darkTheme }
@@ -223,10 +225,10 @@ fun MainAppScaffold(
     var showAddDialog by remember { mutableStateOf(false) }
     val destinationStates = rememberSaveableStateHolder()
 
-    val incomingShare by viewModel.incomingShare.collectAsState()
-    val incomingShareId by viewModel.incomingShareId.collectAsState()
-    val collections by viewModel.collections.collectAsState()
-    val allItems by viewModel.items.collectAsState()
+    val incomingShare by viewModel.incomingShare.collectAsStateWithLifecycle()
+    val incomingShareId by viewModel.incomingShareId.collectAsStateWithLifecycle()
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val allItems by viewModel.items.collectAsStateWithLifecycle()
     // Cards carry bounded previews. Always observe the full row for detail and edit.
     val detailState = produceState<ItemWithCollections?>(null, activeDetailItemId, viewModel) {
         value = null
@@ -239,11 +241,11 @@ fun MainAppScaffold(
         }
     }
     val activeDetailItem = detailState.value?.takeIf { it.item.id == activeDetailItemId }
-    val selectedBrowseId by viewModel.selectedCollectionId.collectAsState()
-    val pendingDeletion by viewModel.pendingCollectionDeletion.collectAsState()
+    val selectedBrowseId by viewModel.selectedCollectionId.collectAsStateWithLifecycle()
+    val pendingDeletion by viewModel.pendingCollectionDeletion.collectAsStateWithLifecycle()
     val captureContextId = if (currentDestination == AppDestination.COLLECTIONS) collectionDetailId else null
-    val capture by viewModel.captureState.collectAsState()
-    val isBatchMode by viewModel.isBatchMode.collectAsState()
+    val capture by viewModel.captureState.collectAsStateWithLifecycle()
+    val isBatchMode by viewModel.isBatchMode.collectAsStateWithLifecycle()
     val captureSnackbar = remember { SnackbarHostState() }
     var snackbarIsError by remember { mutableStateOf(false) }
     LaunchedEffect(pendingDeletion?.operationId) {
@@ -337,7 +339,7 @@ fun MainAppScaffold(
                                 contentDescription = "Library"
                             )
                         },
-                        label = { Text("Library") },
+                        label = { Text("Library", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         modifier = Modifier.testTag("nav_item_library")
                     )
 
@@ -350,7 +352,7 @@ fun MainAppScaffold(
                                 contentDescription = "Collections"
                             )
                         },
-                        label = { Text("Collections") },
+                        label = { Text("Collections", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         modifier = Modifier.testTag("nav_item_collections")
                     )
 
@@ -363,7 +365,7 @@ fun MainAppScaffold(
                                 contentDescription = "Settings"
                             )
                         },
-                        label = { Text("Settings") },
+                        label = { Text("Settings", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         modifier = Modifier.testTag("nav_item_settings")
                     )
                 }

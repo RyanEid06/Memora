@@ -19,9 +19,11 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.ItemWithCollections
 import com.example.model.*
 import com.example.ui.MainViewModel
+import com.example.ui.LOCAL_SEARCH_ERROR
 import com.example.ui.components.ItemCard
 import com.example.ui.components.ItemGridCard
 import com.example.ui.components.TypeFilterChipStrip
@@ -57,28 +60,28 @@ fun LibraryScreen(
     collectionScope: String? = null,
     onNavigateBack: (() -> Unit)? = null
 ) {
-    val aiAnswer by viewModel.aiAnswer.collectAsState()
-    val isAiSearching by viewModel.isAiSearching.collectAsState()
-    val aiError by viewModel.aiSearchError.collectAsState()
-    val items by viewModel.localSearchResults.collectAsState()
-    val allItems by viewModel.items.collectAsState()
-    val resultsReady by viewModel.resultsReady.collectAsState()
-    val searchState by viewModel.localSearchState.collectAsState()
-    val localSearchError by viewModel.localSearchError.collectAsState()
-    val customStart by viewModel.customDateStart.collectAsState()
-    val customEnd by viewModel.customDateEnd.collectAsState()
-    val groupedSections by viewModel.groupedSections.collectAsState()
-    val collections by viewModel.collections.collectAsState()
-    val selectedKind by viewModel.selectedKind.collectAsState()
-    val selectedColId by viewModel.selectedCollectionId.collectAsState()
-    val sortOrder by viewModel.sortOrder.collectAsState()
-    val dateFilter by viewModel.dateFilter.collectAsState()
-    val dateBasis by viewModel.dateBasis.collectAsState()
-    val dateGrouping by viewModel.dateGrouping.collectAsState()
-    val libraryLayout by viewModel.libraryLayout.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val isBatchMode by viewModel.isBatchMode.collectAsState()
-    val selectedItemIds by viewModel.selectedItemIds.collectAsState()
+    val aiAnswer by viewModel.aiAnswer.collectAsStateWithLifecycle()
+    val isAiSearching by viewModel.isAiSearching.collectAsStateWithLifecycle()
+    val aiError by viewModel.aiSearchError.collectAsStateWithLifecycle()
+    val allItems by viewModel.items.collectAsStateWithLifecycle()
+    val searchState by viewModel.localSearchState.collectAsStateWithLifecycle()
+    val items = searchState.result?.items.orEmpty()
+    val groupedSections = searchState.result?.sections.orEmpty()
+    val resultsReady = searchState.result != null && !searchState.queryPending && !searchState.searchInFlight && !searchState.searchError
+    val localSearchError = LOCAL_SEARCH_ERROR.takeIf { searchState.searchError }
+    val customStart by viewModel.customDateStart.collectAsStateWithLifecycle()
+    val customEnd by viewModel.customDateEnd.collectAsStateWithLifecycle()
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val selectedKind by viewModel.selectedKind.collectAsStateWithLifecycle()
+    val selectedColId by viewModel.selectedCollectionId.collectAsStateWithLifecycle()
+    val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
+    val dateFilter by viewModel.dateFilter.collectAsStateWithLifecycle()
+    val dateBasis by viewModel.dateBasis.collectAsStateWithLifecycle()
+    val dateGrouping by viewModel.dateGrouping.collectAsStateWithLifecycle()
+    val libraryLayout by viewModel.libraryLayout.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val isBatchMode by viewModel.isBatchMode.collectAsStateWithLifecycle()
+    val selectedItemIds by viewModel.selectedItemIds.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     BackHandler(enabled = isBatchMode) { viewModel.clearSelection() }
     LaunchedEffect(viewModel) {
@@ -396,7 +399,7 @@ fun LibraryScreen(
         // Keep each layout's host stable while search loads or becomes empty so typing keeps focus.
         if (libraryLayout == LibraryLayout.GRID) {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Adaptive(minSize = (160 * LocalDensity.current.fontScale).dp),
                 state = gridState,
                 modifier = Modifier
                     .fillMaxSize()
@@ -408,13 +411,13 @@ fun LibraryScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 libraryHeaders.forEachIndexed { index, header ->
-                    item(key = "library_header_$index", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) { header() }
+                    item(key = "library_header_$index", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { header() }
                 }
                 if (showResultState) {
-                    item(key = "library_result_state", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) { resultState() }
+                    item(key = "library_result_state", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { resultState() }
                 } else for (section in groupedSections) {
                     if (section.title.isNotBlank()) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = section.title,
                                 style = MaterialTheme.typography.titleSmall,
@@ -439,7 +442,7 @@ fun LibraryScreen(
                         )
                     }
                 }
-                if (searchState.result?.nextCursor != null) item(key = "load_more", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+                if (searchState.result?.nextCursor != null) item(key = "load_more", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                     TextButton(onClick = viewModel::loadMoreLocalResults,
                         enabled = !searchState.queryPending && !searchState.searchInFlight,
                         modifier = Modifier.fillMaxWidth().testTag("load_more_results")) {

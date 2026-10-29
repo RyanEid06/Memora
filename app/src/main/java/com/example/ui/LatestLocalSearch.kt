@@ -26,6 +26,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
+internal const val LOCAL_SEARCH_ERROR = "Could not search your library. Try again."
+
 /** One immutable snapshot is used for both flat results and grouped results. */
 internal data class LocalSearchContext(
     val query: String = "",

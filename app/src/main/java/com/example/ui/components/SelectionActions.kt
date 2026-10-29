@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -21,9 +22,9 @@ import kotlinx.coroutines.launch
 /** Shared actions keep selection behavior identical in Library and Search. */
 @Composable
 fun SelectionActions(viewModel: MainViewModel, visibleCount: Int, visibleIds: () -> Collection<String>, selectedIds: Set<String>) {
-    val collections by viewModel.collections.collectAsState()
-    val resultsReady by viewModel.resultsReady.collectAsState()
-    val selectingVisible by viewModel.selectingVisible.collectAsState()
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val resultsReady by viewModel.resultsReady.collectAsStateWithLifecycle()
+    val selectingVisible by viewModel.selectingVisible.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
     var collectionAction by remember { mutableStateOf<Boolean?>(null) }
     var actionItemIds by remember { mutableStateOf(emptySet<String>()) }

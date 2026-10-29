@@ -194,7 +194,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             _resultsReady.value = true
         },
-        onError = { _localSearchError.value = "Could not search your library. Try again." },
+        onError = { _localSearchError.value = LOCAL_SEARCH_ERROR },
         onPending = {
             _resultsReady.value = false
             _localSearchError.value = null

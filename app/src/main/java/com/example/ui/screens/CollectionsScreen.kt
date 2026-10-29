@@ -17,12 +17,14 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.contentDescription
@@ -45,9 +47,9 @@ fun CollectionsScreen(
     modifier: Modifier = Modifier,
     onSelectCollectionItems: (String?) -> Unit = onCollectionSelected
 ) {
-    val collections by viewModel.collections.collectAsState()
-    val allItems by viewModel.items.collectAsState()
-    val collectionItemCounts by viewModel.collectionItemCounts.collectAsState()
+    val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val allItems by viewModel.items.collectAsStateWithLifecycle()
+    val collectionItemCounts by viewModel.collectionItemCounts.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.libraryMessages.collect { snackbarHost.showSnackbar(it, withDismissAction = true) }
@@ -107,7 +109,7 @@ fun CollectionsScreen(
         }
     ) { innerPadding ->
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = (160 * LocalDensity.current.fontScale).dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)

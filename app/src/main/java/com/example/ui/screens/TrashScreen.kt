@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -32,7 +33,7 @@ fun TrashScreen(
     modifier: Modifier = Modifier,
     onNavigateBack: () -> Unit = {}
 ) {
-    val trashItems by viewModel.trashItems.collectAsState()
+    val trashItems by viewModel.trashItems.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
         viewModel.libraryMessages.collect { snackbarHost.showSnackbar(it, withDismissAction = true) }

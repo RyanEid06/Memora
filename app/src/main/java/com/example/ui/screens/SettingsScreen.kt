@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -54,9 +55,9 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val stats by viewModel.storageStats.collectAsState()
-    val lastBackup by viewModel.lastSuccessfulBackup.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
+    val stats by viewModel.storageStats.collectAsStateWithLifecycle()
+    val lastBackup by viewModel.lastSuccessfulBackup.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
 
     val prefs = remember { context.getSharedPreferences("personal_library_settings", Context.MODE_PRIVATE) }
     var pauseAi by remember { mutableStateOf(prefs.getBoolean("ai_paused", false)) }
