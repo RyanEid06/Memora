@@ -368,6 +368,40 @@ class AiQueuePrivacyTest {
         assertEquals("FAILED", after.localIndexCoverage.uppercase())
     }
 
+    @Test fun failedLocalPdfExtractionEmitsSafeDiagnosticWhileAiIsPaused() = runBlocking {
+        val repository = LibraryRepository(context)
+        val sentinel = "PRIVATE_LOCAL_EXTRACT_SENTINEL_${java.util.UUID.randomUUID()}"
+        val item = repository.captureStream("$sentinel is not a PDF".byteInputStream(), "corrupt-local.pdf", "application/pdf")
+        context.getSharedPreferences("personal_library_settings", 0).edit().putBoolean("ai_paused", true).commit()
+        val logger = java.util.logging.Logger.getLogger("MemoraDiagnostics")
+        val records = mutableListOf<java.util.logging.LogRecord>()
+        val handler = object : java.util.logging.Handler() {
+            override fun publish(record: java.util.logging.LogRecord) { records += record }
+            override fun flush() = Unit
+            override fun close() = Unit
+        }
+        val oldParentHandling = logger.useParentHandlers
+        logger.useParentHandlers = false
+        logger.addHandler(handler)
+        try {
+            val result = LocalIndexer(context, repository).indexItem(item)
+            assertEquals("FAILED", result.coverage.uppercase())
+            assertEquals("FAILED", repository.dao.getItemById(item.id)!!.localIndexCoverage.uppercase())
+            assertEquals(item.content, repository.dao.getItemById(item.id)!!.content)
+            val record = records.single { it.message.startsWith("operation=local_extract ") }
+            assertTrue(record.message.contains(Regex("duration_ms=\\d+")))
+            assertTrue(record.message.contains("count=1"))
+            assertTrue(record.message.contains(Regex("error_class=[A-Za-z0-9_$]+")))
+            assertTrue(record.message.contains("build="))
+            assertFalse(record.message.contains(sentinel))
+            assertNull("Extraction diagnostics must not retain the exception", record.thrown)
+            assertTrue(androidx.work.WorkManager.getInstance(context).getWorkInfosForUniqueWork("ai_job_${item.id}").get().isEmpty())
+        } finally {
+            logger.removeHandler(handler)
+            logger.useParentHandlers = oldParentHandling
+        }
+    }
+
     @Test fun automaticRecoveryDoesNotResurrectTerminalFailures() = runBlocking {
         val repository = LibraryRepository(context)
         val item = repository.createNote("Failed work", "Wait for user retry", emptyList())

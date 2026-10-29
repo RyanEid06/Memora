@@ -3,6 +3,7 @@ package com.example.indexing
 import android.content.Context
 import androidx.work.*
 import com.example.data.LibraryRepository
+import com.example.diagnostics.OperationDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -20,8 +21,12 @@ class LocalIndexWorker(context: Context, parameters: WorkerParameters) : Corouti
                 currentCoroutineContext().ensureActive()
                 val item = repository.dao.getItemById(id) ?: continue
                 if (item.isTrash || item.aiStatus != "PENDING" && item.localIndexCoverage != "PENDING") continue
+                val startedNanos = System.nanoTime()
                 try { indexer.indexItem(item) } catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { repository.dao.updateAiStatus(item.id, "NEEDS_RETRY") }
+                catch (error: Exception) {
+                    OperationDiagnostics.failure("local_index", startedNanos, error, 1)
+                    repository.dao.updateAiStatus(item.id, "NEEDS_RETRY")
+                }
             }
             afterId = ids.last()
         }

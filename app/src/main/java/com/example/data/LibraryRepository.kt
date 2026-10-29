@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import androidx.work.await
 import com.example.indexing.LocalIndexer
 import com.example.indexing.DurableAiWorker
+import com.example.diagnostics.OperationDiagnostics
 import com.example.reminder.ReminderScheduler
 import com.personallibrary.core.backup.BackupAssetRecord
 import com.personallibrary.core.backup.BackupCollectionRecord
@@ -729,6 +730,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
 
     // Keep originals alive through streaming, but release the Room transaction after the metadata snapshot.
     suspend fun exportEncryptedBackup(uri: Uri, passphrase: CharArray): Boolean = withContext(Dispatchers.IO) {
+        val startedNanos = System.nanoTime()
         assetMutations.withLock {
             try {
                 val manifest = backupSnapshot()
@@ -745,7 +747,7 @@ class LibraryRepository(private val context: Context, database: LibraryRoomDatab
                 true
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (e: Exception) {
-                e.printStackTrace()
+                OperationDiagnostics.failure("backup_export", startedNanos, e, 1)
                 false
             }
         }

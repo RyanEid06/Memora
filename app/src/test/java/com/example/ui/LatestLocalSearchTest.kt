@@ -22,6 +22,58 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LatestLocalSearchTest {
+    @Test fun searchFailureEmitsSafeOperationTimingAndClassWithoutPrivatePayload() = runTest {
+        val records = mutableListOf<java.util.logging.LogRecord>()
+        val logger = java.util.logging.Logger.getLogger("MemoraDiagnostics")
+        val handler = object : java.util.logging.Handler() {
+            override fun publish(record: java.util.logging.LogRecord) { records += record }
+            override fun flush() = Unit
+            override fun close() = Unit
+        }
+        logger.addHandler(handler)
+        try {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            var failed = false
+            val runner = LatestLocalSearch(backgroundScope,
+                { throw IllegalStateException("PRIVATE_PROVIDER_QUERY_BODY") }, {}, {}, { failed = true }, dispatcher, dispatcher)
+            runner.refresh(LocalSearchContext(query = "PRIVATE_OWNER_QUERY"))
+            runCurrent()
+            assertTrue(failed)
+            assertTrue("Failed search must emit privacy-safe operation diagnostics", records.any { it.message.startsWith("operation=local_search ") })
+            val record = records.single { it.message.startsWith("operation=local_search ") }
+            assertTrue(record.message.contains("error_class=IllegalStateException"))
+            assertTrue(record.message.contains(Regex("duration_ms=\\d+")))
+            assertTrue(record.message.contains("build="))
+            assertFalse(record.message.contains("PRIVATE_"))
+            assertNull("Diagnostics must not retain the exception/message/stack", record.thrown)
+
+            val cursor = LibrarySearchCursor(LibrarySearchRequest(query = "PRIVATE_OWNER_QUERY"), 0, 100, "first", "first")
+            val paging = LatestLocalSearch(backgroundScope, { emptyList() }, {}, {}, {}, dispatcher, dispatcher,
+                pageSearch = { _, after ->
+                    if (after == null) LibrarySearchPage(listOf(row("first")), emptyMap(), cursor)
+                    else throw java.io.IOException("PRIVATE_PAGE_BODY")
+                })
+            paging.refresh(LocalSearchContext(query = "PRIVATE_OWNER_QUERY"))
+            runCurrent()
+            paging.loadMore()
+            runCurrent()
+            assertTrue(paging.state.value.searchError)
+            assertEquals(listOf("first"), paging.state.value.result!!.items.map { it.item.id })
+            val pageRecord = records.single { it.message.startsWith("operation=local_search_page ") }
+            assertTrue(pageRecord.message.contains("error_class=IOException"))
+            assertTrue(pageRecord.message.contains("count=1"))
+            assertFalse(pageRecord.message.contains("PRIVATE_"))
+            assertNull(pageRecord.thrown)
+
+            val cancelled = LatestLocalSearch(backgroundScope,
+                { throw kotlinx.coroutines.CancellationException("PRIVATE_CANCEL") }, {}, {},
+                { fail("Cancellation must not become a search error") }, dispatcher, dispatcher)
+            cancelled.refresh(LocalSearchContext(query = "PRIVATE_CANCEL_QUERY"))
+            runCurrent()
+            assertEquals("Cancellation is not a diagnostic failure", 2, records.size)
+        } finally { logger.removeHandler(handler) }
+    }
+
     private fun row(id: String, kind: String = "NOTE", collection: String? = null, saved: Long = 100) =
         ItemWithCollections(
             ItemEntity(id, id, "synthetic birthday evidence", kind, createdAt = saved),

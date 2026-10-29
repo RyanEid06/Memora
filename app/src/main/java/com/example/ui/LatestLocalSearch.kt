@@ -5,6 +5,7 @@ import com.example.data.ItemWithCollections
 import com.example.data.LibrarySearchCursor
 import com.example.data.LibrarySearchPage
 import com.example.data.LibrarySearchRequest
+import com.example.diagnostics.OperationDiagnostics
 import com.example.model.DateBasis
 import com.example.model.DateFilter
 import com.example.model.DateGrouping
@@ -112,6 +113,7 @@ internal class LatestLocalSearch(
         onPending()
         job?.cancel()
         job = scope.launch(workerDispatcher) {
+            val startedNanos = System.nanoTime()
             val progress = launch {
                 delay(275)
                 withContext(publicationDispatcher) {
@@ -137,7 +139,8 @@ internal class LatestLocalSearch(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                OperationDiagnostics.failure("local_search", startedNanos, error, 1)
                 withContext(publicationDispatcher) {
                     if (capturedGeneration == generation.get()) {
                         _state.value = _state.value.copy(queryPending = false, searchInFlight = false, showProgress = false, searchError = true)
@@ -160,6 +163,7 @@ internal class LatestLocalSearch(
         onPending()
         _state.value = previous.copy(searchInFlight = true, searchError = false)
         job = scope.launch(workerDispatcher) {
+            val startedNanos = System.nanoTime()
             try {
                 val page = execute(context, cursor)
                 val rows = (result.items + page.items).distinctBy { it.item.id }
@@ -172,7 +176,8 @@ internal class LatestLocalSearch(
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) {
+            catch (error: Exception) {
+                OperationDiagnostics.failure("local_search_page", startedNanos, error, result.items.size)
                 withContext(publicationDispatcher) {
                     if (capturedGeneration == generation.get()) {
                         _state.value = _state.value.copy(searchInFlight = false, searchError = true)

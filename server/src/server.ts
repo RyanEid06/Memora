@@ -727,8 +727,7 @@ function parseJsonBody(req: http.IncomingMessage, limitBytes: number, signal: Ab
     const onData = (chunk: Buffer) => {
       bytesReceived += chunk.length;
       if (bytesReceived > limitBytes) {
-        const err = new Error('PAYLOAD_TOO_LARGE');
-        (err as any).statusCode = 413;
+        const err = new RequestFailure(413, 'PAYLOAD_TOO_LARGE');
         req.pause();
         req.once('error', () => {});
         fail(err);
@@ -749,9 +748,7 @@ function parseJsonBody(req: http.IncomingMessage, limitBytes: number, signal: Ab
         const parsed = JSON.parse(raw);
         resolve(parsed);
       } catch {
-        const err = new Error('INVALID_JSON');
-        (err as any).statusCode = 400;
-        reject(err);
+        reject(new RequestFailure(400, 'INVALID_JSON'));
       }
     };
 
@@ -763,9 +760,18 @@ function parseJsonBody(req: http.IncomingMessage, limitBytes: number, signal: Ab
   });
 }
 
-function logSanitized(reqId: string, method: string, path: string, statusCode: number, durationMs: number) {
+// Only server-created failures carry public status codes; provider error fields are untrusted.
+class RequestFailure extends Error {
+  constructor(readonly statusCode: 400 | 413 | 429, readonly code: 'INVALID_JSON' | 'PAYLOAD_TOO_LARGE' | 'RATE_LIMITED') {
+    super(code);
+  }
+}
+
+function logSanitized(reqId: string, method: string, path: string, statusCode: number, durationMs: number, errorClass?: string) {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] req_id=${reqId} ${method} ${path} status=${statusCode} duration=${durationMs}ms`);
+  const operation = ['/v1/ai/answer', '/v1/ai/analyze', '/v1/ai/embed', '/v1/ai/search-plan'].includes(path) ? path.slice('/v1/ai/'.length) : undefined;
+  const diagnostic = errorClass && operation ? ` operation=${operation} error_class=${errorClass}` : '';
+  console.log(`[${timestamp}] req_id=${reqId} ${method} ${path} status=${statusCode} duration=${durationMs}ms${diagnostic}`);
 }
 
 // Simple in-memory rate limiter per deviceId
@@ -847,7 +853,7 @@ export function createServer(config?: Partial<ServerConfig>) {
     res.setHeader('X-Request-Id', reqId);
     res.setHeader('Content-Type', 'application/json');
 
-    function sendResponse(statusCode: number, data: any) {
+    function sendResponse(statusCode: number, data: any, errorClass?: string) {
       if (res.writableEnded || res.destroyed) return;
       if (statusCode === 413) {
         // Flush the rejection before closing a potentially incomplete upload.
@@ -857,7 +863,15 @@ export function createServer(config?: Partial<ServerConfig>) {
       const durationMs = Date.now() - startTime;
       res.writeHead(statusCode);
       res.end(JSON.stringify(data));
-      logSanitized(reqId, req.method || 'GET', pathname, statusCode, durationMs);
+      logSanitized(reqId, req.method || 'GET', pathname, statusCode, durationMs, errorClass);
+    }
+
+    function providerFailure(error: unknown, publicCode: string) {
+      if (controller.signal.aborted) return;
+      if (error instanceof RequestFailure) return sendResponse(error.statusCode, { error: error.code });
+      // Error.name and statusCode can contain arbitrary provider-controlled values.
+      const errorClass = error instanceof TypeError ? 'TypeError' : error instanceof SyntaxError ? 'SyntaxError' : error instanceof Error ? 'Error' : 'Unknown';
+      return sendResponse(502, { error: publicCode }, errorClass);
     }
 
     const timer = setTimeout(() => {
@@ -1061,7 +1075,7 @@ export function createServer(config?: Partial<ServerConfig>) {
     res.once('close', () => { if (!providerPending) release(); });
     async function invokeProvider<T>(action: () => Promise<T>, cost = 1): Promise<T> {
       if (!providerGlobalLimiter.checkRateLimit('global', cost) || !providerDailyLimiter.checkRateLimit('global', cost)) {
-        throw Object.assign(new Error('RATE_LIMITED'), { statusCode: 429 });
+        throw new RequestFailure(429, 'RATE_LIMITED');
       }
       providerPending = true;
       try { return await action(); }
@@ -1107,10 +1121,8 @@ export function createServer(config?: Partial<ServerConfig>) {
           answer: result.answer,
           sourceIds: result.sourceIds.map(sourceId => sourceReferences.get(sourceId)!)
         });
-      } catch (err: any) {
-        if (controller.signal.aborted) return;
-        if (err.statusCode === 429) return sendResponse(429, { error: 'RATE_LIMITED' });
-        return sendResponse(502, { error: 'ANSWER_PROVIDER_UNAVAILABLE' });
+      } catch (err: unknown) {
+        return providerFailure(err, 'ANSWER_PROVIDER_UNAVAILABLE');
       }
     }
 
@@ -1118,31 +1130,37 @@ export function createServer(config?: Partial<ServerConfig>) {
     if (pathname === '/v1/ai/analyze' && req.method === 'POST') {
       try {
         const body = await parseJsonBody(req, maxBodyBytes, controller.signal);
+        if (!isRecord(body)) return sendResponse(400, { error: 'INVALID_REQUEST' });
         const { itemId, kind, textContent, originalFileName, mediaParts } = body;
-        if (!itemId || !kind) {
+        if (typeof itemId !== 'string' || !itemId || typeof kind !== 'string' || !kind ||
+            (textContent !== undefined && typeof textContent !== 'string') ||
+            (originalFileName !== undefined && typeof originalFileName !== 'string')) {
           return sendResponse(400, { error: 'INVALID_REQUEST', message: 'itemId and kind are required' });
         }
 
         // Validate mediaParts if present
-        if (mediaParts) {
+        if (mediaParts !== undefined) {
           if (!Array.isArray(mediaParts) || mediaParts.length > 6) {
             return sendResponse(400, { error: 'INVALID_REQUEST', message: 'mediaParts must be an array of at most 6 parts' });
           }
           for (const p of mediaParts) {
-            if (!p.mimeType || !ALLOWED_MEDIA_MIMES.has(p.mimeType.toLowerCase())) {
-              return sendResponse(400, { error: 'UNSUPPORTED_MIME_TYPE', message: `MIME type ${p.mimeType} not supported for media analysis` });
+            if (!isRecord(p) || typeof p.mimeType !== 'string' || !ALLOWED_MEDIA_MIMES.has(p.mimeType.toLowerCase())) {
+              return sendResponse(400, { error: 'UNSUPPORTED_MIME_TYPE', message: 'MIME type not supported for media analysis' });
             }
-            if (p.dataBase64 && p.dataBase64.length > 2 * 1024 * 1024) {
+            if (p.dataBase64 !== undefined && typeof p.dataBase64 !== 'string') {
+              return sendResponse(400, { error: 'INVALID_REQUEST' });
+            }
+            if (typeof p.dataBase64 === 'string' && p.dataBase64.length > 2 * 1024 * 1024) {
               return sendResponse(413, { error: 'PAYLOAD_TOO_LARGE', message: 'Individual media part exceeds size limit' });
             }
           }
         }
 
         controller.signal.throwIfAborted();
-        const result = await invokeProvider(() => provider!.analyze(itemId, kind, textContent, originalFileName, mediaParts, controller.signal));
+        const result = await invokeProvider(() => provider!.analyze(itemId, kind, textContent, originalFileName, mediaParts as MediaPart[] | undefined, controller.signal));
         return sendResponse(200, result);
-      } catch (err: any) {
-        return sendResponse(err.statusCode || 500, { error: err.message || 'ANALYSIS_FAILED' });
+      } catch (err: unknown) {
+        return providerFailure(err, 'ANALYZE_PROVIDER_UNAVAILABLE');
       }
     }
 
@@ -1150,6 +1168,7 @@ export function createServer(config?: Partial<ServerConfig>) {
     if (pathname === '/v1/ai/embed' && req.method === 'POST') {
       try {
         const body = await parseJsonBody(req, maxBodyBytes, controller.signal);
+        if (!isRecord(body)) return sendResponse(400, { error: 'INVALID_REQUEST' });
         const { texts } = body;
         if (!Array.isArray(texts) || texts.length === 0) {
           return sendResponse(400, { error: 'INVALID_REQUEST', message: 'texts must be a non-empty array' });
@@ -1165,8 +1184,8 @@ export function createServer(config?: Partial<ServerConfig>) {
         controller.signal.throwIfAborted();
         const result = await invokeProvider(() => provider!.embed(texts, controller.signal), texts.length);
         return sendResponse(200, result);
-      } catch (err: any) {
-        return sendResponse(err.statusCode || 500, { error: err.message || 'EMBED_FAILED' });
+      } catch (err: unknown) {
+        return providerFailure(err, 'EMBED_PROVIDER_UNAVAILABLE');
       }
     }
 
@@ -1188,8 +1207,8 @@ export function createServer(config?: Partial<ServerConfig>) {
           controller.signal
         ));
         return sendResponse(200, result);
-      } catch (err: any) {
-        return sendResponse(err.statusCode || 500, { error: err.message || 'SEARCH_PLAN_FAILED' });
+      } catch (err: unknown) {
+        return providerFailure(err, 'SEARCH_PLAN_PROVIDER_UNAVAILABLE');
       }
     }
 

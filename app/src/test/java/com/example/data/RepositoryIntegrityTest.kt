@@ -74,6 +74,62 @@ class RepositoryIntegrityTest {
         } finally { scope.cancel(); snapshotDb.close(); destination.delete() }
     }
 
+    @Test fun failedEncryptedBackupExportKeepsTimestampAndEmitsPrivateDiagnosticsOnly() = runBlocking {
+        val prefs = context.getSharedPreferences("personal_library_settings", Context.MODE_PRIVATE)
+        val previousTime = 1_791_234_567_890L
+        prefs.edit().putLong("last_successful_backup_time", previousTime).commit()
+        val exportThread = java.util.concurrent.atomic.AtomicReference<Thread>()
+        val destination = android.net.Uri.parse("content://synthetic-backup/PRIVATE_BACKUP_DESTINATION")
+        org.robolectric.Shadows.shadowOf(context.contentResolver).registerOutputStream(destination,
+            object : java.io.OutputStream() {
+                override fun write(value: Int) {
+                    exportThread.set(Thread.currentThread())
+                    throw java.io.IOException("PRIVATE_BACKUP_DESTINATION")
+                }
+            })
+        val logger = java.util.logging.Logger.getLogger("MemoraDiagnostics")
+        val oldParentHandling = logger.useParentHandlers
+        val records = mutableListOf<java.util.logging.LogRecord>()
+        val handler = object : java.util.logging.Handler() {
+            override fun publish(record: java.util.logging.LogRecord) { records += record }
+            override fun flush() = Unit
+            override fun close() = Unit
+        }
+        val oldErr = System.err
+        val stderr = java.io.ByteArrayOutputStream()
+        // WorkManager/CloseGuard can emit unrelated finalizer stacks during this test.
+        val exportErrors = object : java.io.OutputStream() {
+            override fun write(value: Int) {
+                if (Thread.currentThread() === exportThread.get()) stderr.write(value)
+            }
+            override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                if (Thread.currentThread() === exportThread.get()) stderr.write(bytes, offset, length)
+            }
+        }
+        logger.useParentHandlers = false
+        logger.addHandler(handler)
+        try {
+            System.setErr(java.io.PrintStream(exportErrors, true, Charsets.UTF_8.name()))
+            assertFalse(repository.exportEncryptedBackup(destination, "synthetic-passphrase".toCharArray()))
+            assertEquals(previousTime, repository.getLastSuccessfulBackupTime() ?: -1L)
+            val record = records.single { it.message.startsWith("operation=backup_export ") }
+            assertTrue(record.message.contains(Regex("duration_ms=\\d+")))
+            assertTrue(record.message.contains("count=1"))
+            assertTrue(record.message.contains("build="))
+            assertTrue(record.message.contains("error_class=IOException"))
+            assertNull("Operation diagnostics must not retain the throwable", record.thrown)
+            assertFalse(record.message.contains("PRIVATE_BACKUP_DESTINATION"))
+            val errorOutput = stderr.toString(Charsets.UTF_8.name())
+            assertFalse(errorOutput.contains("PRIVATE_BACKUP_DESTINATION"))
+            assertFalse("Failure stack traces must not be printed to stderr; captured stderr: $errorOutput", errorOutput.contains("\tat "))
+        } finally {
+            System.setErr(oldErr)
+            logger.removeHandler(handler)
+            logger.useParentHandlers = oldParentHandling
+            prefs.edit().remove("last_successful_backup_time").commit()
+        }
+    }
+
     @Test fun collectionReplacementFailureKeepsPreviousPrivateMembership() = runBlocking {
         val private = repository.createCollection("Private", "folder", "#ffffff")
         val extra = repository.createCollection("Extra", "folder", "#ffffff")

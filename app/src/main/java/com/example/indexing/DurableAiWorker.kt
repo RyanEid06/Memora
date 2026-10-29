@@ -9,6 +9,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.ai.AiGateway
 import com.example.ai.AiGatewayException
+import com.example.diagnostics.OperationDiagnostics
 import com.example.ai.AiNetworkPolicy
 import com.example.ai.MediaPart
 import com.example.ai.AnalyzeResponse
@@ -107,6 +108,7 @@ class DurableAiWorker(
 
             if (blobFile != null && blobFile.exists()) {
                 val mime = (initialItem.mimeType ?: "").lowercase()
+                val startedNanos = System.nanoTime()
                 try {
                     when {
                         mime.startsWith("image/") || initialItem.kind in setOf("PHOTO", "STICKER") -> {
@@ -124,7 +126,8 @@ class DurableAiWorker(
                         }
                     }
                 } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                catch (_: Exception) {
+                catch (error: Exception) {
+                    OperationDiagnostics.failure("media_extract", startedNanos, error, mediaParts.size)
                     mediaPartial = true
                 }
             }
@@ -357,6 +360,7 @@ class DurableAiWorker(
     private fun extractBoundedVideoFrames(file: File): List<MediaPart> {
         val parts = mutableListOf<MediaPart>()
         val retriever = MediaMetadataRetriever()
+        val startedNanos = System.nanoTime()
         try {
             retriever.setDataSource(file.absolutePath)
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
@@ -385,9 +389,14 @@ class DurableAiWorker(
                     parts.add(MediaPart("image/jpeg", Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)))
                 }
             }
-        } catch (_: Exception) {
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            OperationDiagnostics.failure("video_extract", startedNanos, error, parts.size)
         } finally {
-            try { retriever.release() } catch (_: Exception) {}
+            try { retriever.release() } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                OperationDiagnostics.failure("media_release", startedNanos, error, parts.size)
+            }
         }
         return parts
     }

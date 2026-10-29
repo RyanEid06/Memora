@@ -7,6 +7,7 @@ import com.example.data.AnalysisJobEntity
 import com.example.data.ItemEntity
 import com.example.data.LibraryRepository
 import com.example.data.SearchDocumentEntity
+import com.example.diagnostics.OperationDiagnostics
 import com.personallibrary.core.ExtractedText
 import com.personallibrary.core.TextExtraction
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class LocalIndexer(
         val mime = (item.mimeType ?: "").lowercase()
         val ext = (item.originalFileName ?: "").substringAfterLast('.', "").lowercase()
 
+        val startedNanos = System.nanoTime()
         val extracted = try {
             when {
                 mime.startsWith("text/") || mime in setOf("application/json", "application/xml", "application/javascript") ||
@@ -74,7 +76,8 @@ class LocalIndexer(
                 else -> ExtractedText("", "UNSUPPORTED")
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-        catch (_: Exception) {
+        catch (error: Exception) {
+            OperationDiagnostics.failure("local_extract", startedNanos, error, 1)
             ExtractedText("", "FAILED")
         }
 

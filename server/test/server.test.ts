@@ -681,8 +681,8 @@ describe('Bounded answer endpoint', () => {
     await new Promise<void>(resolve => app.server.listen(0, '127.0.0.1', resolve));
     const url = `http://127.0.0.1:${(app.server.address() as any).port}/v1/ai/answer`;
     const token = app.registry.createSessionToken('answer-device');
-    const request = async (body: any, authorized = true) => {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authorized ? { 'X-Device-Id': 'answer-device', Authorization: `Bearer ${token}` } : {}) }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+    const request = async (body: any, authorized = true, pathname = '/v1/ai/answer') => {
+      const response = await fetch(url.replace('/v1/ai/answer', pathname), { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authorized ? { 'X-Device-Id': 'answer-device', Authorization: `Bearer ${token}` } : {}) }, body: typeof body === 'string' ? body : JSON.stringify(body) });
       return { status: response.status, body: await response.json() };
     };
     try { await run(request, provider, app, url); }
@@ -844,6 +844,88 @@ describe('Bounded answer endpoint', () => {
       assert.ok(logs.some(line => line.includes('/v1/ai/answer status=502')));
       assert.ok(!logs.join('\n').match(/PRIVATE_|answer-session|Bearer/));
     } finally { console.log = original; }
+  });
+  test('provider failures return fixed errors and one privacy-safe operation diagnostic', async () => {
+    const cases = [
+      ['/v1/ai/answer', input(), 'answer', 'ANSWER_PROVIDER_UNAVAILABLE'],
+      ['/v1/ai/analyze', { itemId: 'PRIVATE_ITEM', kind: 'TEXT', textContent: 'PRIVATE_CONTENT' }, 'analyze', 'ANALYZE_PROVIDER_UNAVAILABLE'],
+      ['/v1/ai/embed', { texts: ['PRIVATE_EMBED_TEXT'] }, 'embed', 'EMBED_PROVIDER_UNAVAILABLE'],
+      ['/v1/ai/search-plan', { query: 'PRIVATE_QUERY' }, 'searchPlan', 'SEARCH_PLAN_PROVIDER_UNAVAILABLE']
+    ] as const;
+    const logs: string[] = [];
+    const results: Array<{ pathname: string; status: number; body: any; expectedError: string }> = [];
+    const original = console.log;
+    console.log = (...args: any[]) => { logs.push(args.join(' ')); };
+    try {
+      await withApp(async (request, provider) => {
+        for (const [pathname, body, method, expectedError] of cases) {
+          const failure = Object.assign(new Error('PRIVATE_PROVIDER_MESSAGE'), {
+            name: 'PRIVATE_PROVIDER_NAME', privateDetail: 'PRIVATE_PROVIDER_FIELD', statusCode: 499
+          });
+          (provider as any)[method] = async () => { throw failure; };
+          const result = await request(body, true, pathname);
+          results.push({ pathname, ...result, expectedError });
+        }
+      }, {}, new AnswerProvider());
+    } finally { console.log = original; }
+    assert.deepStrictEqual(results.map(({ status, body, expectedError }) => ({ status, body, expectedError })), cases.map(([, , , expectedError]) => ({ status: 502, body: { error: expectedError }, expectedError })));
+    const diagnosticLines = logs.filter(line => line.includes('operation='));
+    assert.strictEqual(diagnosticLines.length, cases.length);
+    for (const line of diagnosticLines) {
+      assert.match(line, /req_id=\S+/);
+      assert.match(line, /operation=(answer|analyze|embed|search-plan)/);
+      assert.match(line, /status=502/);
+      assert.match(line, /duration=\d+ms/);
+      assert.match(line, /error_class=Error/);
+      assert.doesNotMatch(line, /PRIVATE_|answer-session|answer-enroll|Bearer/);
+    }
+  });
+  test('malformed JSON and oversized bodies remain client errors on every AI route', async () => withApp(async (request, provider) => {
+    const routes = [
+      ['/v1/ai/answer', 'answer'], ['/v1/ai/analyze', 'analyze'],
+      ['/v1/ai/embed', 'embed'], ['/v1/ai/search-plan', 'searchPlan']
+    ] as const;
+    let calls = 0;
+    for (const [, method] of routes) (provider as any)[method] = async () => { calls++; };
+    for (const [pathname] of routes) {
+      const invalidJsonError = pathname === '/v1/ai/answer' ? 'INVALID_REQUEST' : 'INVALID_JSON';
+      assert.deepStrictEqual(await request('{', true, pathname), { status: 400, body: { error: invalidJsonError } }, pathname);
+      assert.deepStrictEqual(await request('x'.repeat(101), true, pathname), { status: 413, body: { error: 'PAYLOAD_TOO_LARGE' } }, pathname);
+    }
+    assert.strictEqual(calls, 0);
+  }, { maxBodyBytes: 100 }));
+  test('embed and search-plan provider timeouts stay 504 and abort their signals', async () => {
+    for (const [pathname, method, body] of [
+      ['/v1/ai/embed', 'embed', { texts: ['synthetic'] }],
+      ['/v1/ai/search-plan', 'searchPlan', { query: 'synthetic' }]
+    ] as const) {
+      let aborted = false;
+      await withApp(async (request, provider) => {
+        (provider as any)[method] = async (...args: any[]) => new Promise((_resolve, reject) => {
+          args.at(-1)?.addEventListener('abort', () => { aborted = true; reject(new Error('PRIVATE_ABORT')); }, { once: true });
+        });
+        assert.deepStrictEqual(await request(body, true, pathname), {
+          status: 504, body: { error: 'REQUEST_TIMEOUT', message: 'Request exceeded execution deadline' }
+        }, pathname);
+        assert.strictEqual(aborted, true, pathname);
+      }, { requestTimeoutMs: 80 });
+    }
+  });
+  test('provider capacity 429 remains shared across AI routes', async () => {
+    const provider = new AnswerProvider();
+    const pending: Array<() => void> = [];
+    provider.answer = async () => new Promise(resolve => pending.push(() => resolve({ status: 'INSUFFICIENT', answer: '', sourceIds: [] })));
+    let embedCalls = 0;
+    provider.embed = async () => { embedCalls++; return { embeddings: [] } as any; };
+    const responses: Promise<{ status: number; body: any }>[] = [];
+    await withApp(async (request) => {
+      for (let i = 0; i < 4; i++) responses.push(request(input()));
+      while (pending.length < 4) await new Promise(resolve => setTimeout(resolve, 1));
+      assert.deepStrictEqual(await request({ texts: ['synthetic'] }, true, '/v1/ai/embed'), { status: 429, body: { error: 'RATE_LIMITED' } });
+      pending.forEach(resolve => resolve());
+      await Promise.all(responses);
+    }, { requestTimeoutMs: 5000 }, provider);
+    assert.strictEqual(embedCalls, 0);
   });
   test('deadline aborts answer provider before returning 504', async () => {
     const provider = new AnswerProvider();
