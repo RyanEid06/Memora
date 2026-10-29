@@ -93,10 +93,11 @@ data class SearchDocumentEntity(
     val chunkIndex: Int = 0,
     val pageNumber: Int? = null,
     val textContent: String,
-    val embedding: String? = null,
+    val embedding: ByteArray? = null,
     val embeddingDimension: Int = 768,
     val modelVersion: String = "gemini-embedding-2",
-    val coverage: String = "COMPLETE"
+    val coverage: String = "COMPLETE",
+    @ColumnInfo(defaultValue = "2") val embeddingFormatVersion: Int = EmbeddingCodec.FORMAT_VERSION
 )
 
 @Entity(tableName = "analysis_jobs")
@@ -648,6 +649,39 @@ val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
     }
 }
 
+/** Preserve text/citation metadata even when a legacy vector is malformed or incompatible. */
+val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("""CREATE TABLE `search_documents_v9` (
+            `id` TEXT NOT NULL, `itemId` TEXT NOT NULL, `chunkIndex` INTEGER NOT NULL,
+            `pageNumber` INTEGER, `textContent` TEXT NOT NULL, `embedding` BLOB,
+            `embeddingDimension` INTEGER NOT NULL, `modelVersion` TEXT NOT NULL,
+            `coverage` TEXT NOT NULL, `embeddingFormatVersion` INTEGER NOT NULL DEFAULT 2,
+            PRIMARY KEY(`id`))""".trimIndent())
+        db.compileStatement("INSERT INTO search_documents_v9 VALUES(?,?,?,?,?,?,?,?,?,2)").use { insert ->
+            db.query("SELECT id,itemId,chunkIndex,pageNumber,textContent,embedding,embeddingDimension,modelVersion,coverage FROM search_documents").use { rows ->
+                while (rows.moveToNext()) {
+                    insert.clearBindings()
+                    insert.bindString(1, rows.getString(0))
+                    insert.bindString(2, rows.getString(1))
+                    insert.bindLong(3, rows.getLong(2))
+                    if (rows.isNull(3)) insert.bindNull(4) else insert.bindLong(4, rows.getLong(3))
+                    insert.bindString(5, rows.getString(4))
+                    val vector = EmbeddingCodec.migrateCsv(if (rows.isNull(5)) null else rows.getString(5), rows.getInt(6), rows.getString(7))
+                    if (vector == null) insert.bindNull(6) else insert.bindBlob(6, vector)
+                    insert.bindLong(7, rows.getLong(6))
+                    insert.bindString(8, rows.getString(7))
+                    insert.bindString(9, rows.getString(8))
+                    insert.executeInsert()
+                }
+            }
+        }
+        db.execSQL("DROP TABLE search_documents")
+        db.execSQL("ALTER TABLE search_documents_v9 RENAME TO search_documents")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_search_documents_itemId ON search_documents (itemId)")
+    }
+}
+
 @Database(
     entities = [
         ItemEntity::class,
@@ -662,7 +696,7 @@ val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
         CollectionDeletionItem::class,
         PrivacyMigrationMembership::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class LibraryRoomDatabase : RoomDatabase() {

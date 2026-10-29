@@ -203,7 +203,7 @@ class DurableAiWorker(
                                     chunkIndex = chunkInfo.index,
                                     pageNumber = chunkInfo.pageNumber,
                                     textContent = chunkInfo.text,
-                                    embedding = vec.joinToString(","),
+                                    embedding = com.example.data.EmbeddingCodec.encode(vec),
                                     embeddingDimension = 768,
                                     modelVersion = "gemini-embedding-2",
                                     coverage = if (isPdf || chunks.size >= 40) "PARTIAL" else analysis.coverage

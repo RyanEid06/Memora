@@ -170,9 +170,8 @@ class LocalIndexer(
                     documents.any { document ->
                         document.chunkIndex == chunk.index && document.pageNumber == chunk.pageNumber && document.textContent == chunk.text &&
                             document.id in setOf("doc_${item.id}_${item.localIndexVersion}_${chunk.index}", "local_${item.id}_${item.localIndexVersion}_${chunk.index}") &&
-                            document.modelVersion == "gemini-embedding-2" && document.embeddingDimension == 768 && document.embedding?.split(',')?.let { values ->
-                                values.size == 768 && values.all { it.toFloatOrNull()?.isFinite() == true }
-                            } == true
+                            com.example.data.EmbeddingCodec.decode(document.embedding, document.embeddingFormatVersion,
+                                document.embeddingDimension, document.modelVersion) != null
                     }
                 }
                 if (hasAllEmbeddings) {

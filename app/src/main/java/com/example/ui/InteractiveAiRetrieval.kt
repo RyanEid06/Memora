@@ -57,16 +57,15 @@ internal class InteractiveAiRetrieval(private val dao: LibraryDao, private val p
         // Questions contain connecting words and possessives that need not occur in a
         // saved note. Reuse FTS prefixes as alternatives, then prefer more matched terms.
         val terms = interactiveAiQuestionTerms(context.query, expandedConcepts)
-        val fts = terms.mapNotNull { SearchQuery.fts(it) }.joinToString(" OR ").ifBlank { null }
-        val candidateText = "lower(i.title || ' ' || i.content || ' ' || COALESCE(i.extractedText, '') || ' ' || " +
-            "COALESCE(i.aiDescription, '') || ' ' || COALESCE(i.aiConcepts, '') || ' ' || COALESCE(i.originalFileName, ''))"
-        val candidateRelevance = if (terms.isEmpty()) "0" else terms.joinToString(" + ") {
-            "CASE WHEN instr($candidateText, lower(?)) > 0 THEN 1 ELSE 0 END"
+        val termQueries = terms.mapNotNull { SearchQuery.fts(it) }
+        val fts = termQueries.joinToString(" OR ").ifBlank { null }
+        val candidateRelevance = if (termQueries.isEmpty()) "0" else termQueries.joinToString(" + ") {
+            "CASE WHEN i.rowid IN (SELECT docid FROM items_fts WHERE items_fts MATCH ?) THEN 1 ELSE 0 END"
         }
         val prioritized = if (fts == null) emptyList() else dao.getAiCandidates(SimpleSQLiteQuery(
             "SELECT i.* FROM items i JOIN items_fts ON i.rowid = items_fts.docid " +
                 "WHERE $eligibility AND items_fts MATCH ? ORDER BY ($candidateRelevance) DESC, i.createdAt DESC, i.id LIMIT ?",
-            (arguments + listOf(fts) + terms + listOf(MAX_ITEMS)).toTypedArray()
+            (arguments + listOf(fts) + termQueries + listOf(MAX_ITEMS)).toTypedArray()
         ))
         val remaining = MAX_ITEMS - prioritized.size
         val fallback = if (remaining == 0) emptyList() else dao.getAiCandidates(SimpleSQLiteQuery(
@@ -76,32 +75,36 @@ internal class InteractiveAiRetrieval(private val dao: LibraryDao, private val p
             (arguments + listOf(encodedIds(prioritized.map { it.item.id }), remaining)).toTypedArray()
         ))
         val items = prioritized + fallback
-        val documents = mutableListOf<SearchDocumentEntity>()
-        val snapshot = InteractiveAiSnapshot(items, documents, capturedPrivacy)
+        val snapshot = InteractiveAiSnapshot(items, emptyList(), capturedPrivacy)
         requireCurrent(snapshot) { true }
         // Rank the existing chunks before applying the per-item bound. Otherwise early
         // embedded pages can crowd out a later relevant page that has only local text.
-        val relevance = if (terms.isEmpty()) "0" else terms.joinToString(" + ") {
-            "CASE WHEN instr(lower(sd.textContent), lower(?)) > 0 THEN 1 ELSE 0 END"
-        }
-        for (row in items) {
-            val remainingDocuments = MAX_DOCUMENTS - documents.size
-            if (remainingDocuments == 0) break
-            // Filter again in SQL before loading vectors/text. Canonical IDs contain the
-            // current item version; legacy or obsolete chunks cannot become semantic evidence.
-            documents += dao.getAiCandidateDocuments(SimpleSQLiteQuery(
-                "SELECT sd.* FROM search_documents sd JOIN items i ON i.id = sd.itemId " +
-                    "WHERE $eligibility AND i.id = ? AND i.localIndexVersion = ? " +
+        // Wrapped per-item LIMITs work on API29 SQLite without window functions. Bind shared
+        // terms/privacy once: even160 candidates stay below the legacy999-parameter limit.
+        val documents = if (items.isEmpty()) emptyList() else {
+            val queryTerms = if (terms.isEmpty()) "SELECT '' AS term WHERE 0" else
+                "VALUES " + terms.joinToString(",") { "(?)" }
+            val relevance = "(SELECT COUNT(*) FROM query_terms WHERE instr(lower(sd.textContent), term) > 0)"
+            val branches = items.mapIndexed { ordinal, _ ->
+                "SELECT * FROM (SELECT sd.*, $ordinal AS candidateOrdinal, $relevance AS chunkRelevance, " +
+                    "CASE WHEN length(sd.embedding) = 3072 AND sd.embeddingFormatVersion = 2 AND sd.embeddingDimension = 768 " +
+                    "AND sd.modelVersion = 'gemini-embedding-2' THEN 0 ELSE 1 END AS embeddingPriority " +
+                    "FROM search_documents sd JOIN eligible i ON i.id = sd.itemId " +
+                    "WHERE i.id = ? AND i.localIndexVersion = ? " +
                     "AND sd.id IN ('doc_' || i.id || '_' || i.localIndexVersion || '_' || sd.chunkIndex, " +
                     "'local_' || i.id || '_' || i.localIndexVersion || '_' || sd.chunkIndex) " +
-                    "ORDER BY ($relevance) DESC, CASE WHEN sd.embedding IS NOT NULL AND sd.embeddingDimension = 768 " +
-                    "AND sd.modelVersion = 'gemini-embedding-2' THEN 0 ELSE 1 END, sd.chunkIndex, sd.id LIMIT ?",
-                (arguments + listOf(row.item.id, row.item.localIndexVersion) + terms +
-                    listOf(minOf(MAX_DOCUMENTS_PER_ITEM, remainingDocuments))).toTypedArray()
+                    "ORDER BY chunkRelevance DESC, embeddingPriority, sd.chunkIndex, sd.id LIMIT $MAX_DOCUMENTS_PER_ITEM)"
+            }
+            dao.getAiCandidateDocuments(SimpleSQLiteQuery(
+                "WITH query_terms(term) AS ($queryTerms), eligible AS " +
+                    "(SELECT i.id, i.localIndexVersion FROM items i WHERE $eligibility) " +
+                    branches.joinToString(" UNION ALL ") +
+                    " ORDER BY candidateOrdinal, chunkRelevance DESC, embeddingPriority, chunkIndex, id LIMIT $MAX_DOCUMENTS",
+                (terms + arguments + items.flatMap { listOf(it.item.id, it.item.localIndexVersion) }).toTypedArray()
             ))
         }
         requireCurrent(snapshot) { true }
-        return snapshot.copy(documents = documents.toList())
+        return snapshot.copy(documents = documents)
     }
 
     /** Must run for EACH concrete dispatch, including auth renewal/retry, and publication. */

@@ -569,17 +569,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                     val itemDocs = docsByItem[item.id] ?: emptyList()
                     for (doc in itemDocs) {
-                        if (queryVec != null && doc.embedding != null && doc.embedding.length <= 24_000 &&
-                            doc.embeddingDimension == 768 && doc.modelVersion == "gemini-embedding-2") {
-                            try {
-                                val chunkVec = doc.embedding.split(",").map { it.toFloat() }.toFloatArray()
+                        if (queryVec != null) {
+                            val chunkVec = com.example.data.EmbeddingCodec.decode(doc.embedding, doc.embeddingFormatVersion,
+                                doc.embeddingDimension, doc.modelVersion)
+                            if (chunkVec != null) {
                                 val sim = SemanticVectorMath.compatibleSimilarity(queryVec, chunkVec, doc.embeddingDimension, doc.modelVersion)
                                 if (sim > bestSim) {
                                     bestSim = sim
                                     bestChunkText = doc.textContent
                                     bestPage = doc.pageNumber
                                 }
-                            } catch (_: Exception) {}
+                            }
                         }
                     }
 

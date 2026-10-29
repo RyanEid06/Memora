@@ -183,7 +183,7 @@ class AiQueuePrivacyTest {
             assertEquals(listOf("/v1/auth/challenge"), requests)
             requests.clear()
             val database = androidx.room.Room.databaseBuilder(context, com.example.data.LibraryRoomDatabase::class.java,
-                "personal_library_room.db").addMigrations(com.example.data.MIGRATION_5_6, com.example.data.MIGRATION_6_7, com.example.data.MIGRATION_7_8).addCallback(com.example.data.DATABASE_CALLBACK).build()
+                "personal_library_room.db").addMigrations(com.example.data.MIGRATION_5_6, com.example.data.MIGRATION_6_7, com.example.data.MIGRATION_7_8, com.example.data.MIGRATION_8_9).addCallback(com.example.data.DATABASE_CALLBACK).build()
             try {
                 database.openHelper.writableDatabase.execSQL("INSERT INTO privacy_migration_memberships VALUES(?, ?)", arrayOf(item.id, "old-private"))
                 context.getSharedPreferences("personal_library_settings", 0).edit().putStringSet("excluded_collections", setOf("old-private")).commit()
@@ -311,7 +311,7 @@ class AiQueuePrivacyTest {
         repository.dao.updateItem(item)
         val docs = DurableAiWorker.createChunksForItem(item, item.aiDescription, null, emptyList()).map { chunk ->
             com.example.data.SearchDocumentEntity("doc_${item.id}_${item.localIndexVersion}_${chunk.index}", item.id, chunk.index, chunk.pageNumber, chunk.text,
-                embedding = List(768) { "0.1" }.joinToString(","), embeddingDimension = 768, coverage = "COMPLETE")
+                embedding = com.example.data.EmbeddingCodec.encode(FloatArray(768) { .1f }), embeddingDimension = 768, coverage = "COMPLETE")
         }
         repository.dao.insertSearchDocuments(docs)
         val prior = AnalysisJobEntity(item.id, item.localIndexVersion, item.localIndexVersion, status = "EXCLUDED", attempts = 2)
@@ -319,13 +319,13 @@ class AiQueuePrivacyTest {
         LocalIndexer(context, repository).reconcileAiEligibility(listOf(item.id))
         assertEquals(prior.copy(status = "COMPLETED"), repository.dao.getAnalysisJob(item.id))
         assertEquals("READY", repository.dao.getItemById(item.id)!!.aiStatus)
-        assertEquals(docs, repository.dao.getSearchDocumentsForItem(item.id))
+        assertDocumentsUnchanged(docs, repository.dao.getSearchDocumentsForItem(item.id))
         assertTrue(androidx.work.WorkManager.getInstance(context).getWorkInfosForUniqueWork("ai_job_${item.id}").get().isEmpty())
     }
 
     @Test fun reenableLegacyStaleOrWrongModelEmbeddingsRebuildsCachedTextWithoutExtraction() = runBlocking {
         val repository = LibraryRepository(context)
-        for (invalid in listOf("legacy-id", "old-version", "wrong-model")) {
+        for (invalid in listOf("legacy-id", "old-version", "wrong-model", "malformed-vector", "wrong-format", "nonfinite")) {
             val item = repository.createNote("Cached $invalid", "synthetic chemistry", emptyList()).copy(
                 aiDescription = "cached analysis", aiStatus = "EXCLUDED", localIndexCoverage = "COMPLETE", localIndexVersion = 3)
             repository.dao.updateItem(item)
@@ -336,7 +336,12 @@ class AiQueuePrivacyTest {
                     else -> "doc_${item.id}_3_${chunk.index}"
                 }
                 com.example.data.SearchDocumentEntity(id, item.id, chunk.index, chunk.pageNumber, chunk.text,
-                    embedding = List(768) { "0.1" }.joinToString(","), embeddingDimension = 768,
+                    embedding = when (invalid) {
+                        "malformed-vector" -> byteArrayOf(1, 2)
+                        "nonfinite" -> ByteArray(3072).apply { java.nio.ByteBuffer.wrap(this).order(java.nio.ByteOrder.LITTLE_ENDIAN).putFloat(Float.NaN) }
+                        else -> com.example.data.EmbeddingCodec.encode(FloatArray(768) { .1f })
+                    }, embeddingDimension = 768,
+                    embeddingFormatVersion = if (invalid == "wrong-format") 1 else 2,
                     modelVersion = if (invalid == "wrong-model") "obsolete-model" else "gemini-embedding-2")
             }
             repository.dao.insertSearchDocuments(docs)
@@ -344,7 +349,7 @@ class AiQueuePrivacyTest {
             repository.dao.insertOrUpdateAnalysisJob(prior)
             LocalIndexer(context, repository).reconcileAiEligibility(listOf(item.id))
             assertEquals(invalid, prior.copy(status = "QUEUED", metadataOnly = true), repository.dao.getAnalysisJob(item.id))
-            assertEquals(docs, repository.dao.getSearchDocumentsForItem(item.id))
+            assertDocumentsUnchanged(docs, repository.dao.getSearchDocumentsForItem(item.id))
             assertEquals(3, repository.dao.getItemById(item.id)!!.localIndexVersion)
             assertTrue(repository.search("chemistry").any { it.id == item.id })
         }
@@ -441,6 +446,11 @@ class AiQueuePrivacyTest {
         prefs.edit().putBoolean("ai_paused", false).commit()
         indexer.enqueuePendingAnalysisJobs()
         assertFalse(manager.getWorkInfosForUniqueWork("ai_job_${item.id}").get().isEmpty())
+    }
+
+    private fun assertDocumentsUnchanged(expected: List<com.example.data.SearchDocumentEntity>, actual: List<com.example.data.SearchDocumentEntity>) {
+        assertEquals(expected.map { it.copy(embedding = null) }, actual.map { it.copy(embedding = null) })
+        expected.zip(actual).forEach { (before, after) -> assertArrayEquals(before.embedding, after.embedding) }
     }
 
     @Test fun excludedCollectionStillIndexesLocallyAndPreventsWorkerUpload() = runBlocking {

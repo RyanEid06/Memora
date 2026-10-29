@@ -10,6 +10,7 @@ import com.example.data.ItemCollectionCrossRef
 import com.example.data.ItemEntity
 import com.example.data.LibraryRepository
 import com.example.data.LibraryRoomDatabase
+import com.example.data.SearchDocumentEntity
 import com.example.model.DateFilter
 import com.example.model.ItemKind
 import com.example.model.SortOrder
@@ -24,6 +25,7 @@ import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.ceil
+import java.lang.management.ManagementFactory
 
 /** Host characterization only: opt in explicitly; never enforce device latency from Robolectric. */
 @RunWith(RobolectricTestRunner::class)
@@ -127,5 +129,89 @@ class SearchPerformanceBaselineTest {
             }
         }
         output.appendText("# Correctness and post-checkpoint FTS integrity passed for all three fixtures.\n")
+    }
+    @Test fun measureInteractiveRetrievalAndVectorDecoding() = runBlocking {
+        assumeTrue(java.lang.Boolean.getBoolean("memora.performanceBaseline"))
+        val searchOutput = File(requireNotNull(System.getProperty("memora.performanceBaselineOutput")))
+        val output = File(searchOutput.parentFile, "${searchOutput.nameWithoutExtension}-ai-retrieval.csv")
+        output.parentFile?.mkdirs()
+        output.writeText("# Synthetic host JVM/Room retrieval plus selected-vector decoding; no device/provider acceptance.\n" +
+            "# source=${System.getProperty("memora.performanceBaselineSource", "unrecorded")}; fixture setup and5warmups excluded;20samples.\n" +
+            "items,chunks_per_item,documents,vectors,stored_vector_bytes,document_selects_per_call,p50_ms,p95_ms,p99_ms,allocated_bytes_per_call,gc_collections,gc_ms\n")
+        val allocationBean = (ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean)
+            ?.takeIf { it.isThreadAllocatedMemorySupported }?.apply { isThreadAllocatedMemoryEnabled = true }
+        fun allocated() = allocationBean?.let { bean ->
+            bean.getThreadAllocatedBytes(bean.allThreadIds).filter { it >= 0 }.sum()
+        }
+        fun gcCount() = ManagementFactory.getGarbageCollectorMXBeans().sumOf { maxOf(0, it.collectionCount) }
+        fun gcTime() = ManagementFactory.getGarbageCollectorMXBeans().sumOf { maxOf(0, it.collectionTime) }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = context.getSharedPreferences("phase9_synthetic_baseline", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        for (count in listOf(10, 160, 1)) {
+            val chunksPerItem = if (count == 1) 5_000 else 20
+            val documentSelects = AtomicInteger()
+            val db = Room.inMemoryDatabaseBuilder(context, LibraryRoomDatabase::class.java)
+                .addCallback(DATABASE_CALLBACK)
+                .setQueryCallback({ sql, _ -> if (sql.contains("FROM search_documents", true)) documentSelects.incrementAndGet() }, Executor { it.run() })
+                .build()
+            try {
+                val dao = db.libraryDao()
+                val vector = requireNotNull(com.example.data.EmbeddingCodec.encode(FloatArray(768) { .001f + (it % 17) * .0001234f }))
+                db.withTransaction {
+                    repeat(count) { index ->
+                        val id = "ai-baseline-$index"
+                        dao.insertItem(ItemEntity(id, "Birthday receipt $index", "Synthetic note", "DOCUMENT",
+                            extractedText = "Synthetic OCR page text ".repeat(1_000)))
+                        dao.insertSearchDocuments((0 until chunksPerItem).map { chunk ->
+                            SearchDocumentEntity("doc_${id}_1_$chunk", id, chunk, chunk + 1,
+                                if (count == 1 && chunk < chunksPerItem - 1) "Birthday unrelated page ".repeat(25)
+                                else "Birthday receipt ".repeat(30), embedding = vector)
+                        })
+                    }
+                }
+                val retrieval = InteractiveAiRetrieval(dao, prefs)
+                val query = LocalSearchContext("birthday receipt")
+                var documents = 0
+                var vectors = 0
+                var storedBytes = 0
+                suspend fun sample() {
+                    val snapshot = retrieval.load(query)
+                    documents = snapshot.documents.size
+                    if (count == 1) assertEquals("Late PDF evidence must survive chunk ranking", chunksPerItem, snapshot.documents.first().pageNumber)
+                    vectors = 0
+                    storedBytes = 0
+                    for (doc in snapshot.documents) {
+                        doc.embedding?.let { encoded ->
+                            storedBytes += encoded.size
+                            val decoded = requireNotNull(com.example.data.EmbeddingCodec.decode(encoded, doc.embeddingFormatVersion, doc.embeddingDimension, doc.modelVersion))
+                            assertEquals(768, decoded.size)
+                            vectors++
+                        }
+                    }
+                    assertEquals(minOf(480, count * 4), documents)
+                    assertEquals(documents, vectors)
+                }
+                repeat(5) { sample() }
+                val selectStart = documentSelects.get()
+                val allocationStart = allocated()
+                val collectionStart = gcCount()
+                val gcTimeStart = gcTime()
+                val samples = mutableListOf<Double>()
+                repeat(20) {
+                    val start = System.nanoTime()
+                    sample()
+                    samples += (System.nanoTime() - start) / 1_000_000.0
+                }
+                val allocatedBytes = allocated()?.let { after -> allocationStart?.let { (after - it) / 20 } } ?: -1
+                val warm = samples.sorted()
+                fun percentile(fraction: Double) = String.format(java.util.Locale.ROOT, "%.3f", warm[ceil(warm.size * fraction).toInt() - 1])
+                val line = listOf(count, chunksPerItem, documents, vectors, storedBytes,
+                    (documentSelects.get() - selectStart) / 20.0, percentile(.5), percentile(.95), percentile(.99),
+                    allocatedBytes, gcCount() - collectionStart, gcTime() - gcTimeStart).joinToString(",")
+                output.appendText("$line\n")
+                println("MEMORA_AI_BASELINE $line")
+            } finally { db.close() }
+        }
     }
 }

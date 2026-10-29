@@ -49,7 +49,9 @@ class LibraryMigrationTest {
         )
         fun snapshot(db: SupportSQLiteDatabase, table: String): List<List<String?>> =
             db.query("SELECT * FROM $table ORDER BY 1").use { cursor ->
-                buildList { while (cursor.moveToNext()) add(cursor.columnNames.indices.filter { cursor.columnNames[it] != "kind" }.map { if (cursor.isNull(it)) null else cursor.getString(it) }) }
+                buildList { while (cursor.moveToNext()) add(cursor.columnNames.indices.filter {
+                    cursor.columnNames[it] != "kind" && (table != "search_documents" || cursor.columnNames[it] !in setOf("embedding", "embeddingFormatVersion"))
+                }.map { if (cursor.isNull(it)) null else cursor.getString(it) }) }
             }
         val before = linkedMapOf<String, List<List<String?>>>()
         helper.writableDatabase.apply {
@@ -66,7 +68,7 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_7_8, MIGRATION_8_9).addCallback(DATABASE_CALLBACK).build()
         try {
             val db = migrated.openHelper.writableDatabase
             for ((table, rows) in before) assertEquals("$table metadata changed", rows, snapshot(db, table))
@@ -112,7 +114,7 @@ class LibraryMigrationTest {
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
             .setJournalMode(androidx.room.RoomDatabase.JournalMode.TRUNCATE)
-            .addMigrations(MIGRATION_6_7, MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).addCallback(DATABASE_CALLBACK).build()
         try {
             val dao = migrated.libraryDao()
             assertEquals(fullBody, dao.getItemById("item")!!.content)
@@ -161,7 +163,7 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).addCallback(DATABASE_CALLBACK).build()
         try {
             val repository = LibraryRepository(context, migrated)
             val dao = repository.dao
@@ -216,7 +218,7 @@ class LibraryMigrationTest {
         }
         helper.close()
         val migrated = Room.databaseBuilder(context, LibraryRoomDatabase::class.java, name)
-            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).addCallback(DATABASE_CALLBACK).build()
+            .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).addCallback(DATABASE_CALLBACK).build()
         try {
             val dao = migrated.libraryDao()
             assertNull(dao.getAllCollections().single { it.id == "legacy" }.appRole)

@@ -76,7 +76,7 @@ class AiAnswerFlowTest {
         vm.repository.dao.insertItem(ItemEntity("local-source", "Sarah birthday", "August 19", "DOCUMENT",
             extractedText = "Sarah birthday August 19", localIndexVersion = 5, localIndexCoverage = "COMPLETE"))
         vm.repository.dao.insertSearchDocument(SearchDocumentEntity("doc_local-source_5_0", "local-source", 0,
-            pageNumber = 7, textContent = "Sarah's birthday is August 19", embedding = vector))
+            pageNumber = 7, textContent = "Sarah's birthday is August 19", embedding = com.example.data.EmbeddingCodec.encode(FloatArray(768) { if (it == 0) 1f else 0f })))
         vm.repository.dao.insertItem(ItemEntity("local-private", "birthday", "NEVER_SEND_PRIVATE_FACT", "TEXT"))
         prefs.edit().putStringSet("excluded_items", setOf("local-private")).putBoolean("ai_paused", false).commit()
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)

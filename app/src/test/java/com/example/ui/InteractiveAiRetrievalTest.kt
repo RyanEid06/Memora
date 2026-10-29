@@ -15,6 +15,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -24,6 +26,8 @@ class InteractiveAiRetrievalTest {
     private val prefs get() = ApplicationProvider.getApplicationContext<Context>()
         .getSharedPreferences("personal_library_settings", 0)
     private lateinit var retrieval: InteractiveAiRetrieval
+    private val documentSelects = AtomicInteger()
+    private val rankingSql = mutableListOf<String>()
 
     @Before fun setup() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -31,7 +35,11 @@ class InteractiveAiRetrievalTest {
             androidx.work.Configuration.Builder().setExecutor(androidx.work.testing.SynchronousExecutor()).build())
         prefs.edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LibraryRoomDatabase::class.java)
-            .addCallback(DATABASE_CALLBACK).build()
+            .addCallback(DATABASE_CALLBACK)
+            .setQueryCallback({ sql, _ ->
+                if (sql.contains("FROM search_documents", true)) documentSelects.incrementAndGet()
+                if (sql.contains("items_fts MATCH", true)) rankingSql += sql
+            }, Executor { it.run() }).build()
         retrieval = InteractiveAiRetrieval(dao, prefs)
     }
     @After fun close() = db.close()
@@ -133,9 +141,9 @@ class InteractiveAiRetrievalTest {
             dao.insertItem(note(id).copy(localIndexVersion = 7))
             repeat(20) { chunk ->
                 dao.insertSearchDocument(SearchDocumentEntity("doc_${id}_7_$chunk", id, chunk,
-                    pageNumber = chunk + 1, textContent = "current page", embedding = "0.1"))
+                    pageNumber = chunk + 1, textContent = "current page", embedding = byteArrayOf(1)))
                 dao.insertSearchDocument(SearchDocumentEntity("doc_${id}_6_$chunk", id, chunk,
-                    pageNumber = 999, textContent = "stale version", embedding = "0.1"))
+                    pageNumber = 999, textContent = "stale version", embedding = byteArrayOf(1)))
             }
         }
         val snapshot = retrieval.load(LocalSearchContext("bir"))
@@ -143,6 +151,7 @@ class InteractiveAiRetrievalTest {
         assertTrue(snapshot.documents.isNotEmpty())
         assertTrue(snapshot.documents.groupBy { it.itemId }.values.all { it.size <= InteractiveAiRetrieval.MAX_DOCUMENTS_PER_ITEM })
         assertTrue(snapshot.documents.all { it.textContent == "current page" && it.pageNumber != 999 })
+        assertEquals("Candidate chunks must be loaded in one bounded statement", 1, documentSelects.get())
     }
 
     @Test fun naturalQuestionRetrievesOlderPartialTermMatchesBeforeRecentFallback() = runBlocking {
@@ -153,11 +162,24 @@ class InteractiveAiRetrievalTest {
         assertEquals(InteractiveAiRetrieval.MAX_ITEMS, snapshot.items.size)
     }
 
+    @Test fun indexedRankingRetainsAnOldRelevantNoteBeyondHundredsOfLargeRecentBodies() = runBlocking {
+        dao.insertItem(note("old-answer", 0).copy(title = "Sarah birthday", content = "August 19"))
+        repeat(650) { index ->
+            dao.insertItem(note("recent-large-$index", 1_000L + index).copy(
+                title = "Unrelated birthday record", extractedText = "synthetic OCR body ".repeat(1_000)))
+        }
+        val snapshot = retrieval.load(LocalSearchContext("When is Sarah's birthday?"))
+        assertEquals("old-answer", snapshot.items.first().item.id)
+        assertTrue("Ranking must use the text index instead of rebuilding giant item text", rankingSql.none {
+            it.contains("lower(i.title", true) || it.contains("i.title ||", true)
+        })
+    }
+
     @Test fun laterMatchingPageHasPriorityOverEarlierUnrelatedChunks() = runBlocking {
         dao.insertItem(note("pdf").copy(kind = "DOCUMENT", localIndexVersion = 7))
         repeat(12) { chunk ->
             dao.insertSearchDocument(SearchDocumentEntity("doc_pdf_7_$chunk", "pdf", chunk,
-                pageNumber = chunk + 1, textContent = "unrelated earlier page", embedding = "0.1"))
+                pageNumber = chunk + 1, textContent = "unrelated earlier page", embedding = byteArrayOf(1)))
         }
         dao.insertSearchDocument(SearchDocumentEntity("local_pdf_7_99", "pdf", 99,
             pageNumber = 93, textContent = "A synthetic birthday receipt on a later page"))

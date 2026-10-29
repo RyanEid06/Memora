@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.MainActivity
 import com.example.data.CollectionEntity
 import com.example.data.ItemEntity
@@ -41,16 +42,21 @@ class LocalSearchUiTest {
     private val itemIds = mutableListOf<String>()
     private val collectionIds = mutableListOf<String>()
     private val token = "searchui" + UUID.randomUUID().toString().replace("-", "")
+    private var restoreLockedSession = false
 
     @After fun cleanup() {
         if (!::vm.isInitialized) return
-        compose.runOnUiThread { vm.clearSelection(); vm.clearFilters(); vm.setSearchQuery(""); vm.setLibraryLayout(LibraryLayout.LIST) }
-        runBlocking {
-            itemIds.forEach { vm.repository.deletePermanently(it) }
-            collectionIds.forEach {
-                val deletion = vm.repository.deleteCollection(it, undoMillis = 0)
-                check(vm.repository.finalizeCollectionDeletion(deletion.operationId))
+        try {
+            compose.runOnUiThread { vm.clearSelection(); vm.clearFilters(); vm.setSearchQuery(""); vm.setLibraryLayout(LibraryLayout.LIST) }
+            runBlocking {
+                itemIds.forEach { vm.repository.deletePermanently(it) }
+                collectionIds.forEach {
+                    val deletion = vm.repository.deleteCollection(it, undoMillis = 0)
+                    check(vm.repository.finalizeCollectionDeletion(deletion.operationId))
+                }
             }
+        } finally {
+            if (restoreLockedSession) compose.runOnUiThread { vm.appLockManager.lock() }
         }
     }
 
@@ -299,6 +305,11 @@ class LocalSearchUiTest {
     private fun prepare() {
         compose.runOnUiThread {
             vm = ViewModelProvider(compose.activity)[MainViewModel::class.java]
+            // Explicit synthetic session only; this does not test credential authentication.
+            if (InstrumentationRegistry.getArguments().getString("allowSyntheticSearchFixture") == "true") {
+                restoreLockedSession = vm.appLockManager.isLocked.value
+                vm.appLockManager.unlock()
+            }
             vm.clearSelection()
             vm.clearFilters()
             vm.setLibraryLayout(LibraryLayout.LIST)

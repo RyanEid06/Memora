@@ -238,7 +238,7 @@ class LibraryManagementTest {
         val item = repository.createNote("Before", "obsoleteword")
         val original = item.copy(sourceDate = 123, createdAt = 456, aiDescription = "staleai", aiConcepts = "staleconcept")
         repository.dao.updateItem(original)
-        repository.dao.insertSearchDocument(SearchDocumentEntity("stale", item.id, textContent = "staleai", embedding = "1,2"))
+        repository.dao.insertSearchDocument(SearchDocumentEntity("stale", item.id, textContent = "staleai", embedding = byteArrayOf(1, 2)))
         repository.dao.insertOrUpdateAnalysisJob(AnalysisJobEntity(item.id))
         repository.editItem(item.id, " After ", "freshword")
         val edited = repository.dao.getItemById(item.id)!!
@@ -258,7 +258,7 @@ class LibraryManagementTest {
         val item = repository.captureStream("original media bytes".byteInputStream(), "original.mp4", "video/mp4")
         val indexed = item.copy(extractedText = "cached text", aiDescription = "media description", localIndexCoverage = "COMPLETE")
         repository.dao.updateItem(indexed)
-        val document = SearchDocumentEntity("page", item.id, pageNumber = 2, textContent = "cached text", embedding = "1,2")
+        val document = SearchDocumentEntity("page", item.id, pageNumber = 2, textContent = "cached text", embedding = byteArrayOf(1, 2))
         repository.dao.insertSearchDocument(document)
         repository.editItem(item.id, "New title", indexed.content)
         val edited = repository.dao.getItemById(item.id)!!

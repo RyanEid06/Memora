@@ -199,7 +199,7 @@ class CollectionAiMembershipTest {
             assertTrue(repository.dao.getItemById(item.id)!!.isTrash)
             assertEquals(listOf(excluded.id), repository.dao.getCollectionIdsForItem(item.id))
             assertTrue(prefs.getStringSet("excluded_items", emptySet())!!.contains(item.id))
-            assertEquals(seededDocuments.getValue(item.id), repository.dao.getSearchDocumentsForItem(item.id))
+            assertDocumentsUnchanged(seededDocuments.getValue(item.id), repository.dao.getSearchDocumentsForItem(item.id))
             assertTrue(repository.dao.searchFts("chemistry").none { it.id == item.id })
         }
     }
@@ -265,7 +265,7 @@ class CollectionAiMembershipTest {
             else listOf("local chemistry page")
         val documents = texts.mapIndexed { index, text ->
             SearchDocumentEntity("doc_${id}_3_$index", id, index, textContent = text,
-                embedding = if (completeEmbeddings) List(768) { "0.1" }.joinToString(",") else null)
+                embedding = if (completeEmbeddings) com.example.data.EmbeddingCodec.encode(FloatArray(768) { .1f }) else null)
         }
         repository.dao.insertSearchDocuments(documents)
         seededDocuments[id] = documents
@@ -279,7 +279,7 @@ class CollectionAiMembershipTest {
         assertEquals(item.aiDescription, current.aiDescription)
         assertTrue(repository.dao.searchFts("chemistry").any { it.id == item.id })
         val documents = repository.dao.getSearchDocumentsForItem(item.id)
-        assertEquals(seededDocuments.getValue(item.id), documents)
+        assertDocumentsUnchanged(seededDocuments.getValue(item.id), documents)
         val job = repository.dao.getAnalysisJob(item.id)!!
         assertEquals(expectedAttempts, job.attempts)
         assertEquals("SyntheticTransient", job.lastErrorClass)
@@ -324,6 +324,11 @@ class CollectionAiMembershipTest {
             viewModel.confirmShare(emptyList())
             assertEquals(second, viewModel.incomingShare.value)
         } finally { application.captureState.finish("Reset synthetic test") }
+    }
+
+    private fun assertDocumentsUnchanged(expected: List<SearchDocumentEntity>, actual: List<SearchDocumentEntity>) {
+        assertEquals(expected.map { it.copy(embedding = null) }, actual.map { it.copy(embedding = null) })
+        expected.zip(actual).forEach { (before, after) -> assertArrayEquals(before.embedding, after.embedding) }
     }
 
     @Test fun secondCollectionDeleteWaitsUntilTheFirstUndoIsResolved() = runBlocking {
