@@ -146,6 +146,7 @@ export class DeviceRegistry {
   private deviceEnrollmentSecret: string;
   private revokedDevices = new Set<string>();
   private consumedNonces = new Map<string, number>();
+  private nonceCleanupCursor?: IterableIterator<[string, number]>;
 
   constructor(sessionSigningSecret: string, deviceEnrollmentSecret: string = '') {
     this.sessionSigningSecret = sessionSigningSecret;
@@ -163,7 +164,15 @@ export class DeviceRegistry {
 
   private cleanOldNonces(): void {
     const now = Date.now();
-    for (const [nonce, ts] of this.consumedNonces.entries()) {
+    this.nonceCleanupCursor ??= this.consumedNonces.entries();
+    // Resume a bounded sweep; never evict live replay history to admit a new nonce.
+    for (let scanned = 0; scanned < 64; scanned++) {
+      const entry = this.nonceCleanupCursor.next();
+      if (entry.done) {
+        this.nonceCleanupCursor = undefined;
+        break;
+      }
+      const [nonce, ts] = entry.value;
       if (now - ts > 10 * 60 * 1000) {
         this.consumedNonces.delete(nonce);
       }
@@ -776,7 +785,8 @@ function logSanitized(reqId: string, method: string, path: string, statusCode: n
 
 // Simple in-memory rate limiter per deviceId
 export class RateLimiter {
-  private requests = new Map<string, number[]>();
+  private requests = new Map<string, { timestamps: number[]; latest: number }>();
+  private cleanupCursor?: IterableIterator<[string, { timestamps: number[]; latest: number }]>;
   private maxRequestsPerMinute: number;
 
   constructor(maxRequestsPerMinute: number = 60, private windowMs = 60000) {
@@ -786,17 +796,26 @@ export class RateLimiter {
   checkRateLimit(key: string, cost = 1): boolean {
     const now = Date.now();
     const windowStart = now - this.windowMs;
-    for (const [id, times] of this.requests) {
-      if (times[times.length - 1] <= windowStart) this.requests.delete(id);
+    this.cleanupCursor ??= this.requests.entries();
+    // Stale identities may temporarily fill the cap while later checks finish this sweep.
+    for (let scanned = 0; scanned < 64; scanned++) {
+      const entry = this.cleanupCursor.next();
+      if (entry.done) {
+        this.cleanupCursor = undefined;
+        break;
+      }
+      const [id, bucket] = entry.value;
+      if (bucket.latest <= windowStart) this.requests.delete(id);
     }
     if (!this.requests.has(key) && this.requests.size >= 10000) return false;
-    let timestamps = this.requests.get(key) || [];
-    timestamps = timestamps.filter(t => t > windowStart);
+    const previous = this.requests.get(key);
+    const timestamps = (previous?.timestamps || []).filter(t => t > windowStart);
     if (!Number.isSafeInteger(cost) || cost < 1 || timestamps.length + cost > this.maxRequestsPerMinute) {
       return false; // limited
     }
     timestamps.push(...Array(cost).fill(now));
-    this.requests.set(key, timestamps);
+    // A clock rollback can append an older event after a still-live newer one.
+    this.requests.set(key, { timestamps, latest: Math.max(now, previous?.latest ?? now) });
     return true;
   }
 }

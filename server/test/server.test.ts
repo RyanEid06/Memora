@@ -4,6 +4,193 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { createServer, DeviceRegistry, FakeGeminiProvider, SdkGeminiProvider, verifyDeviceSignature, clientAddress, RateLimiter } from '../src/server.js';
 
+describe('Phase11 bounded volatile security state', () => {
+  function trackScans(t: any, entries: Map<any, any>) {
+    let visited = 0;
+    const originalEntries = entries.entries.bind(entries);
+    function* countedEntries() {
+      for (const entry of originalEntries()) {
+        visited++;
+        yield entry;
+      }
+    }
+    t.mock.method(entries, 'entries', countedEntries);
+    t.mock.method(entries, Symbol.iterator, countedEntries);
+    return () => { const count = visited; visited = 0; return count; };
+  }
+
+  test('rate checks bound identity scans and retain all 10000 live budgets at capacity', t => {
+    t.mock.method(Date, 'now', () => 2_000_000_000_000);
+    const limiter = new RateLimiter(1);
+    const scans = trackScans(t, (limiter as any).requests);
+    for (let i = 0; i < 10000; i++) assert.ok(limiter.checkRateLimit(`bounded-${i}`));
+    scans();
+    assert.strictEqual(limiter.checkRateLimit('overflow'), false);
+    assert.ok(scans() <= 64, 'one rate check must not scan all 10000 identities');
+    for (let i = 0; i < 10000; i++) assert.strictEqual(limiter.checkRateLimit(`bounded-${i}`), false);
+  });
+
+  test('later rate checks reclaim the entire stale backlog in bounded batches', t => {
+    let now = 2_000_000_000_000;
+    t.mock.method(Date, 'now', () => now);
+    const limiter = new RateLimiter(1);
+    const buckets = (limiter as any).requests as Map<string, unknown>;
+    const scans = trackScans(t, buckets);
+    for (let i = 0; i < 10000; i++) assert.ok(limiter.checkRateLimit(`stale-${i}`));
+    now += 60000;
+    scans();
+    for (let i = 0; i < 320; i++) {
+      limiter.checkRateLimit('sweeper');
+      assert.ok(scans() <= 64, 'expiry work must stay bounded even with a full stale map');
+    }
+    assert.deepStrictEqual([...buckets.keys()], ['sweeper']);
+    assert.ok(limiter.checkRateLimit('new-identity'));
+  });
+
+  test('rate cleanup retains live events after a wall-clock rollback', t => {
+    const start = 2_000_000_000_000;
+    let now = start;
+    t.mock.method(Date, 'now', () => now);
+    const limiter = new RateLimiter(2);
+    assert.ok(limiter.checkRateLimit('rollback'));
+    now = start - 30000;
+    assert.ok(limiter.checkRateLimit('rollback'));
+    now = start + 35000;
+    limiter.checkRateLimit('another-identity');
+    assert.strictEqual(limiter.checkRateLimit('rollback', 2), false, 'the event at start remains live');
+    assert.ok(limiter.checkRateLimit('rollback'));
+    assert.strictEqual(limiter.checkRateLimit('rollback'), false);
+  });
+
+  test('rate windows preserve exact expiry, daily rolling duration and invalid cost rejection', t => {
+    let now = 2_000_000_000_000;
+    t.mock.method(Date, 'now', () => now);
+    const limiter = new RateLimiter(3);
+    for (const cost of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER]) {
+      assert.strictEqual(limiter.checkRateLimit('cost', cost), false);
+    }
+    assert.ok(limiter.checkRateLimit('cost', 3));
+    now += 59999;
+    assert.strictEqual(limiter.checkRateLimit('cost'), false);
+    now++;
+    assert.ok(limiter.checkRateLimit('cost', 3));
+    const daily = new RateLimiter(1000, 24 * 60 * 60 * 1000);
+    assert.ok(daily.checkRateLimit('global', 1000));
+    now += 24 * 60 * 60 * 1000 - 1;
+    assert.strictEqual(daily.checkRateLimit('global'), false);
+    now++;
+    assert.ok(daily.checkRateLimit('global', 1000));
+  });
+
+  test('nonce consumption bounds scans and retains the 20000-entry live replay ledger', t => {
+    const now = 2_000_000_000_000;
+    t.mock.method(Date, 'now', () => now);
+    const registry = new DeviceRegistry('synthetic-phase11');
+    const nonces = (registry as any).consumedNonces as Map<string, number>;
+    const scans = trackScans(t, nonces);
+    const consumed = registry.createChallenge('nonce-device');
+    assert.ok(registry.verifyAndConsumeChallenge('nonce-device', consumed));
+    for (let i = 1; i < 20000; i++) nonces.set(`synthetic-history-${i}`, now);
+    scans();
+    assert.strictEqual(registry.verifyAndConsumeChallenge('nonce-device', registry.createChallenge('nonce-device')), false);
+    assert.ok(scans() <= 64, 'one nonce admission must not scan all 20000 entries');
+    assert.strictEqual(nonces.size, 20000);
+    assert.ok(nonces.has(consumed));
+    assert.strictEqual(registry.verifyAndConsumeChallenge('nonce-device', consumed), false);
+  });
+
+  test('nonce cleanup eventually reclaims stale history without dropping newly consumed replay protection', t => {
+    let now = 2_000_000_000_000;
+    t.mock.method(Date, 'now', () => now);
+    const registry = new DeviceRegistry('synthetic-phase11');
+    const nonces = (registry as any).consumedNonces as Map<string, number>;
+    const scans = trackScans(t, nonces);
+    for (let i = 0; i < 20000; i++) nonces.set(`synthetic-stale-${i}`, now);
+    now += 10 * 60 * 1000 + 1;
+    const challenge = registry.createChallenge('cleanup-device');
+    for (let i = 0; i < 640; i++) {
+      registry.verifyAndConsumeChallenge('cleanup-device', challenge);
+      assert.ok(scans() <= 64, 'nonce cleanup must stay bounded with a full stale map');
+    }
+    assert.deepStrictEqual([...nonces.keys()], [challenge]);
+    assert.strictEqual(registry.verifyAndConsumeChallenge('cleanup-device', challenge), false);
+  });
+
+  test('nonce history retains the strict ten-minute boundary and survives wall-clock rollback', t => {
+    const start = 2_000_000_000_000;
+    let now = start;
+    t.mock.method(Date, 'now', () => now);
+    const registry = new DeviceRegistry('synthetic-phase11');
+    const nonces = (registry as any).consumedNonces as Map<string, number>;
+    const challenge = registry.createChallenge('boundary-device');
+    assert.ok(registry.verifyAndConsumeChallenge('boundary-device', challenge));
+    now -= 30000;
+    assert.strictEqual(registry.verifyAndConsumeChallenge('boundary-device', challenge), false);
+    assert.ok(nonces.has(challenge));
+    now = start + 10 * 60 * 1000;
+    registry.verifyAndConsumeChallenge('boundary-device', registry.createChallenge('boundary-device'));
+    assert.ok(nonces.has(challenge), 'history expires strictly after ten minutes');
+    now++;
+    for (let i = 0; i < 4; i++) registry.verifyAndConsumeChallenge('boundary-device', registry.createChallenge('boundary-device'));
+    assert.strictEqual(nonces.has(challenge), false);
+  });
+
+  test('challenge validity still permits five minutes and one minute of future skew', t => {
+    const start = 2_000_000_000_000;
+    let now = start;
+    t.mock.method(Date, 'now', () => now);
+    const registry = new DeviceRegistry('synthetic-phase11');
+    const exact = registry.createChallenge('validity');
+    const expired = registry.createChallenge('validity');
+    now = start + 300000;
+    assert.ok(registry.verifyAndConsumeChallenge('validity', exact));
+    now++;
+    assert.strictEqual(registry.verifyAndConsumeChallenge('validity', expired), false);
+    const future = registry.createChallenge('validity');
+    const tooFuture = registry.createChallenge('validity');
+    now -= 60000;
+    assert.ok(registry.verifyAndConsumeChallenge('validity', future));
+    now--;
+    assert.strictEqual(registry.verifyAndConsumeChallenge('validity', tooFuture), false);
+  });
+
+  test('OPEN persistence limitation: restart and independent instances reset nonce, runtime revoke and rate state', () => {
+    const first = new DeviceRegistry('synthetic-phase11');
+    const second = new DeviceRegistry('synthetic-phase11');
+    const challenge = first.createChallenge('volatile-device');
+    assert.ok(first.verifyAndConsumeChallenge('volatile-device', challenge));
+    assert.strictEqual(first.verifyAndConsumeChallenge('volatile-device', challenge), false);
+    assert.ok(second.verifyAndConsumeChallenge('volatile-device', challenge));
+    first.revoke('volatile-device');
+    assert.ok(first.isRevoked('volatile-device'));
+    assert.strictEqual(second.isRevoked('volatile-device'), false);
+    const restarted = new DeviceRegistry('synthetic-phase11');
+    assert.ok(restarted.verifyAndConsumeChallenge('volatile-device', challenge));
+    assert.strictEqual(restarted.isRevoked('volatile-device'), false);
+    const beforeRestart = new RateLimiter(1);
+    assert.ok(beforeRestart.checkRateLimit('volatile-device'));
+    assert.strictEqual(beforeRestart.checkRateLimit('volatile-device'), false);
+    assert.ok(new RateLimiter(1).checkRateLimit('volatile-device'));
+  });
+
+  test('configured revocations reload into each registry without making runtime revokes durable', () => {
+    const original = process.env.REVOKED_DEVICE_IDS;
+    process.env.REVOKED_DEVICE_IDS = 'configured-phase11';
+    try {
+      const first = new DeviceRegistry('synthetic-phase11');
+      first.revoke('runtime-phase11');
+      const restarted = new DeviceRegistry('synthetic-phase11');
+      assert.ok(first.isRevoked('configured-phase11'));
+      assert.ok(restarted.isRevoked('configured-phase11'));
+      assert.strictEqual(restarted.validateSession('configured-phase11', restarted.createSessionToken('configured-phase11')), false);
+      assert.strictEqual(restarted.isRevoked('runtime-phase11'), false);
+    } finally {
+      if (original === undefined) delete process.env.REVOKED_DEVICE_IDS;
+      else process.env.REVOKED_DEVICE_IDS = original;
+    }
+  });
+});
+
 describe('Automatic signed registration', () => {
   test('embedding batches reserve one budget unit per underlying provider call', () => {
     const limiter = new RateLimiter(3);
