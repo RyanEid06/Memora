@@ -1,4 +1,12 @@
-# Memora V1 owner handoff
+# Memora owner handoff
+
+## Current private candidate: 1.0.3 / code6
+
+The QA branch contains the owner-feedback and 42-finding remediation changes. Install only the permanently signed APK identified by its delivery receipt after all five exact-source CI jobs pass. The intended Desktop file is `Memora-v1.0.3-code6-arm64-private.apk`; its existence/signature/hash must be verified before delivery is claimed. Build and receipt details: [candidate procedure](QA_CANDIDATE_BUILD.md), [current status](STATUS.md) and [root checkpoint](../CODEX_WORKLOG.md).
+
+Back up the library and confirm the backup is readable first. The same package/permanent certificate and higher version code support an in-place update from earlier permanent-signed releases/candidates. If Android reports a signature conflict or asks to uninstall, stop and preserve the existing app/data. Do not install debug-signed optimizedCheck APKs as updates.
+
+Physical update/migration, actual microphone/recognizer, OEM handoffs, TalkBack, external media and live-provider behavior still require owner testing. Backend registration deployment is separate, and deferred F36/F37 persistence remains open. Follow the version/hash-specific guide delivered alongside the private APK. Public V1.0.1 history below remains separate.
 
 ## Official V1.0.1 handoff
 
@@ -43,4 +51,8 @@ The owner-created permanent key remains outside the repository; its public [iden
 
 Owner-authorized branch: `main`. The first release is `v1.0.0`; its annotated tag identifies the final release-documentation commit, which has a green exact-source five-job run. The signed APKs were built from `1c42f958f3e663d2e547a266670bae4fb54e5214`; comparison confirms only documentation changed between that build source and the tagged source. The immutable [GitHub release](https://github.com/RyanEid06/personal-library/releases/tag/v1.0.0) is the download and checksum record. Detailed CI, signing, runtime, and artifact evidence is in the ignored `artifacts/release-v1/FINAL_VERIFICATION.md`. Earlier finalization started at `aeacb1c2e241122b69a9f781411367ffe3ef779f`, with Android/core checkpoint `4217f95dc42f9f3fc6d7769bbb99e78f168379e4` [green](https://github.com/RyanEid06/personal-library/actions/runs/38876784338), followed by the final 32-test server ingress correction. Historical `codex/v1` was deleted at the owner's request after its complete history was preserved and verified in `artifacts/release-v1/codex-v1-221b877-archive.bundle`; it was an older alternative implementation, not an ancestor of main.
 
-Fixes cover auth/Keystore, backup/restore/refcounts, SAF WhatsApp import, reminders, dates/browse, AI privacy/queue/version races, media bounds/page provenance, search labels/snippets, video/voice, capture lifecycle/transactions, cancellation, migrations and CI. The [finalization ledger](superpowers/plans/2026-10-15-v1-finalization.md) preserves regression and review history. Fake-provider CI and API 35 media tests do not certify the owner's phone or live Gemini quality.
+Fixes cover auth/Keystore, backup/restore/refcounts, SAF WhatsApp import, reminders, dates/browse, AI privacy/queue/version races, media bounds/page provenance, search labels/snippets, video/voice, capture lifecycle/transactions, cancellation, migrations and CI. The [historical verification ledger](CODEX_V1_0_1_WORKLOG.md) preserves regression and review history. Fake-provider CI and API 35 media tests do not certify the owner's phone or live Gemini quality.
+
+## Retained acceptance targets
+
+The original V1 acceptance targets remain unverified: evaluate20–30 realistic retrieval queries with at least90% top-five success, and measure10k-item search p95 below300ms on the intended device. Record cold/warm methodology, import/indexing load and actual query set; host synthetic timing is separate. Fresh-device restore, real WhatsApp attachments, notifications/reboot/OEM behavior, paired Gemini, voice and TalkBack also remain owner checks. Removing completed implementation roadmaps does not close these acceptance targets.

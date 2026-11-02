@@ -1,6 +1,6 @@
 # Prepared owner-feedback backend rollout
 
-Status: prepared locally; **not deployed**. The approved owner-feedback candidate needs the new public signed registration route before automatic AI setup can work against the hosted service. The existing deployed backend and code 4 APK remain separate from this implementation. This document is the concrete rollout checklist; authorization to deploy is still required.
+Status: prepared locally; **not deployed**. The approved owner-feedback candidate needs the new public signed registration route before automatic AI setup can work against the hosted service. The deployed backend and earlier code4/code5 APKs remain separate from the current1.0.3/code6 remediation candidate. This document is the concrete rollout checklist; authorization to deploy is still required.
 
 ## Changes ready for review
 

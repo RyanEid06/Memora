@@ -70,7 +70,6 @@ class LocalSearchQueryContractTest {
         val trashPlan = db.openHelper.readableDatabase.query("EXPLAIN QUERY PLAN SELECT id FROM items WHERE isTrash=1 ORDER BY trashTimestamp DESC, id ASC LIMIT 50").use { result ->
             buildList { while (result.moveToNext()) add(result.getString(3)) }.joinToString("\n")
         }
-        java.io.File("../artifacts/remediation-20261027/phase3-query-plans.txt").appendText("browse:\n$browsePlan\ntrash:\n$trashPlan\n")
         assertTrue(browsePlan, browsePlan.contains("index_items_isTrash_createdAt_id"))
         assertTrue(trashPlan, trashPlan.contains("index_items_isTrash_trashTimestamp_id"))
     }

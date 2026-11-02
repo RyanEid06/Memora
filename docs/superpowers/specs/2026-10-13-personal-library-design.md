@@ -1,6 +1,6 @@
 # Personal Library: product design and delivery roadmap
 
-Date: 13 October 2026. Status: draft proposal for review. "Personal Library" is a working description, not a chosen product name.
+Date: 13 October 2026. Status: historical draft, superseded by the [V1.0.1 master specification](../../CODEX_V1_0_1_MASTER_PROMPT.md) and [current remediation plan](../../Memora_42_Finding_Remediation_Plan.md). Retained for design rationale. "Personal Library" is a working description, not a chosen product name.
 
 This document specifies the proposed first version and its acceptance gates. It does not represent an implemented app, tested WhatsApp integration, deployed backend, or a detailed coding plan.
 

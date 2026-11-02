@@ -2,7 +2,7 @@
 
 ## Current header revision
 
-The owner's later instruction removes the Memora logo/name from the Library header in both Light and Dark modes. Current item count and date basis appear directly alongside the existing controls. The updated appearance instrumentation verifies the information/action row, absent branding, actual mode colors, saved selection and Activity recreation, and captures both themes. Local Android JVM 54/54, lint 0 errors/80 existing warnings, debug/optimized builds and both test-APK compilations pass; actual split inspection preserves bundled OCR and the required ABIs. Final exact-source hosted runtime results, screenshots and conditional permanent signing are recorded in ignored `artifacts/release-v1/FINAL_VERIFICATION.md` under the [final optimized release plan](../../superpowers/plans/2026-10-16-final-optimized-release.md).
+The owner's later instruction removes the Memora logo/name from the Library header in both Light and Dark modes. Current item count and date basis appear directly alongside the existing controls. The updated appearance instrumentation verifies the information/action row, absent branding, actual mode colors, saved selection and Activity recreation, and captures both themes. Local Android JVM 54/54, lint 0 errors/80 existing warnings, debug/optimized builds and both test-APK compilations pass; actual split inspection preserves bundled OCR and the required ABIs. Final exact-source hosted runtime results, screenshots and conditional permanent signing are recorded in ignored `artifacts/release-v1/FINAL_VERIFICATION.md` under the [retained release status](../../STATUS.md).
 
 ## Original appearance checkpoint
 

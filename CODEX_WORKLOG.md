@@ -4,7 +4,7 @@
 
 Continue the owner-authorized [42-finding plan](docs/Memora_42_Finding_Remediation_Plan.md) in phase order. This root file is the only progress ledger. [Audit](docs/Memora_Debug_Audit.md) and [review/rulings](docs/CODEX_REMEDIATION_REVIEW_2026_10_27.md) remain canonical; earlier immutable V1.0.1 [master](docs/CODEX_V1_0_1_MASTER_PROMPT.md)/[historical worklog](docs/CODEX_V1_0_1_WORKLOG.md) are preserved. Detailed prior root ledger is retained in Git and `artifacts/remediation-20261027/phase12-worklog-before-compaction.md`.
 
-**Branch/worktree:** `codex/v1.0.1-final-qa`, one existing checkout, resume base `55dac6b`. No new worktree. Current tracked edits: this ledger, README, app version, generated optimized test rules, and one AndroidTest fixture. Preserve unrelated untracked `classes.jar` and `docs/qa/`, all certified APKs and original AVD images.
+**Branch/worktree:** `codex/v1.0.1-final-qa`, one existing checkout, resume source `e7826c3`. No new worktree. Current tracked edits: documentation cleanup and one JVM-test diagnostic removal; application/native inputs remain unchanged from verified code6 checkpoint. Preserve unrelated untracked `classes.jar` and `docs/qa/`, all certified APKs and original AVD images.
 
 **Owner scope:** On 29Oct authorized existing permanent-key signing for a private test APK, Desktop delivery and short physical guide. On 2Nov additionally authorized push+CI after local completion and a higher version that updates the installed app. Selected **1.0.3 / code6**, unchanged package `com.personallibrary.app`, same permanent cert. No main merge, tag/public release, deployment, paid provider calls, physical-phone operation, uninstall or data wipe. Quiet work requested; Luna/high checking/review when useful, Sol/high only for substantial production delegation.
 
@@ -16,7 +16,13 @@ Final optimized100 gate PASS on2Nov: base77, search10, compact/lifecycle4, wide1
 
 Final frozen-source and original3 AVD hash verification: `phase12-final-source-images-verified.json`. Luna/high final source delta review found no blocker; README and physical guide refreshed. Earlier environmental failures remain preserved and are superseded by the clean full optimized100 gate, not erased.
 
-**Next:** commit explicit5 tracked files, push QA branch, require core/android/server/emulator/signing-workflow terminal-success at exact SHA, then run supported private candidate signing and independently verify/copy ARM64 APK plus guide to Desktop. No merge/tag/public release/deployment. Keep checkout clean for signing; save post-commit CI/delivery receipts under ignored artifacts so source SHA remains exact. Physical/provider acceptance and F36/F37 remain open.
+**Current CI:** checkpoint `e7826c3` pushed with explicit public-destination approval. Run41497773423 passed core/server/signing-workflow but Android failed: LocalSearchQueryContractTest appended a diagnostic file under an absent ignored directory. Removed only that incidental append; all EXPLAIN/assertions unchanged. Focused query-contract suite PASS1m22s (`phase12-ci-path-fix-focused.log`); native/production source unchanged.
+
+**Owner cleanup:** refreshed README/status/handoff/candidate procedure/backend rollout/legacy metadata and GitHub description, added docs index, removed5 completed/superseded planning drafts after transferring pending device acceptance targets and fixing inbound links. Immutable master/worklog/audit, active42findingplan/rulings, deferred persistence design, original artwork and QA evidence retained; prior plans remain in Git history.
+
+Documentation validation:76 relative links checked with zero missing targets; JSON metadata parses; Luna/high cleanup review found no blocker after stale wording corrections. Focused query-contract tests9/9PASS, zero failures/errors/skips. No production/native changes and no signing/version ledger reservation yet.
+
+**Next:** commit/push cleanup and diagnostic fix, require core/android/server/emulator/signing-workflow terminal-success at the new exact SHA, then run supported private candidate signing and independently verify/copy ARM64 APK plus guide to Desktop. No merge/tag/public release/deployment. Keep checkout clean for signing; save post-commit CI/delivery receipts under ignored artifacts so source SHA remains exact. Physical/provider acceptance and F36/F37 remain open.
 
 ## Phase12 observed evidence
 
