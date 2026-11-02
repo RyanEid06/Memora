@@ -15,6 +15,7 @@ import com.example.data.DATABASE_CALLBACK
 import com.example.data.LibraryRepository
 import com.example.data.LibraryRoomDatabase
 import com.example.indexing.AndroidTextExtractor
+import com.example.indexing.LocalIndexer
 import com.example.reminder.ReminderScheduler
 import com.example.security.AppLockManager
 import kotlinx.coroutines.runBlocking
@@ -49,6 +50,8 @@ class ReleaseRuntimeTest {
             assertEquals(1, repository.commitRestore(preview))
             val restored = checkNotNull(repository.dao.getItemById(item.id))
             assertArrayEquals(bytes, checkNotNull(repository.getBlobFile(checkNotNull(restored.contentHash))).readBytes())
+            // WorkManager uses the app database; index this isolated fixture explicitly.
+            LocalIndexer(context, repository).indexItem(restored)
             assertTrue(repository.dao.searchFts("integrity").any { it.id == item.id })
             repository.deletePermanently(item.id)
         } finally {
