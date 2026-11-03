@@ -1,10 +1,10 @@
-# Memora checkpoint — 2 November 2026
+# Memora checkpoint — 3 November 2026
 
 ## Objective, authorization and current state
 
 Continue the owner-authorized [42-finding plan](docs/Memora_42_Finding_Remediation_Plan.md) in phase order. This root file is the only progress ledger. [Audit](docs/Memora_Debug_Audit.md) and [review/rulings](docs/CODEX_REMEDIATION_REVIEW_2026_10_27.md) remain canonical; earlier immutable V1.0.1 [master](docs/CODEX_V1_0_1_MASTER_PROMPT.md)/[historical worklog](docs/CODEX_V1_0_1_WORKLOG.md) are preserved. Detailed prior root ledger is retained in Git and `artifacts/remediation-20261027/phase12-worklog-before-compaction.md`.
 
-**Branch/worktree:** `codex/v1.0.1-final-qa`, one existing checkout, resume source `e7826c3`. No new worktree. Current tracked edits: documentation cleanup and one JVM-test diagnostic removal; application/native inputs remain unchanged from verified code6 checkpoint. Preserve unrelated untracked `classes.jar` and `docs/qa/`, all certified APKs and original AVD images.
+**Branch/worktree:** `codex/v1.0.1-final-qa`, one existing checkout, resume source `6b779c3`. No new worktree. Cleanup and diagnostic fix are committed/pushed. Current change is a two-line AndroidTest grid-render synchronization fix; application/native inputs remain unchanged from verified code6 checkpoint. Preserve unrelated untracked `classes.jar` and `docs/qa/`, all certified APKs and original AVD images.
 
 **Owner scope:** On 29Oct authorized existing permanent-key signing for a private test APK, Desktop delivery and short physical guide. On 2Nov additionally authorized push+CI after local completion and a higher version that updates the installed app. Selected **1.0.3 / code6**, unchanged package `com.personallibrary.app`, same permanent cert. No main merge, tag/public release, deployment, paid provider calls, physical-phone operation, uninstall or data wipe. Quiet work requested; Luna/high checking/review when useful, Sol/high only for substantial production delegation.
 
@@ -18,11 +18,17 @@ Final frozen-source and original3 AVD hash verification: `phase12-final-source-i
 
 **Current CI:** checkpoint `e7826c3` pushed with explicit public-destination approval. Run41497773423 passed core/server/signing-workflow but Android failed: LocalSearchQueryContractTest appended a diagnostic file under an absent ignored directory. Removed only that incidental append; all EXPLAIN/assertions unchanged. Focused query-contract suite PASS1m22s (`phase12-ci-path-fix-focused.log`); native/production source unchanged.
 
+**3Nov continuation:** exact source `6b779c32ebd150f62cc7a2570855464aa1fd914d`, run41500587889 attempt2: Android/core/server/signing-workflow terminal-success; emulator failed one Debug test because its lazy-grid card semantics node was absent before long-click. XML and logs retained in `ci-41500587889-attempt2-emulator/` and `phase12-ci-41500587889-attempt2-failed.log`. Inherited fix waits for `library_grid` then scrolls to the existing tagged card, preserving real long-click and all selection/delete/undo assertions. Luna/high source review supports the mechanism; runtime confirmation pending. Prior attempt1 Maven429 unit failures were superseded by attempt2 Android success, not a current source blocker. Previous compile passed1m4s; fresh build initially hit sandbox Gradle-cache denial and is rerunning with required access (`phase12-ci-grid-fixture-resume-build.log`).
+
+Owner requested emulator-only reruns: started attempt3 of the failed emulator job only (`125764688165`), preserving successful jobs. Owner then explicitly selected **push the fixture fix and verify the new commit**, acknowledging a new SHA automatically runs all five required jobs. For subsequent failures at that SHA, rerun only the failed job. Do not sign the older SHA or imply the uncommitted fix is in its retry. Temporary follow-up must target this chat and current source; scheduling access check retried after permission-review timeout.
+
 **Owner cleanup:** refreshed README/status/handoff/candidate procedure/backend rollout/legacy metadata and GitHub description, added docs index, removed5 completed/superseded planning drafts after transferring pending device acceptance targets and fixing inbound links. Immutable master/worklog/audit, active42findingplan/rulings, deferred persistence design, original artwork and QA evidence retained; prior plans remain in Git history.
 
 Documentation validation:76 relative links checked with zero missing targets; JSON metadata parses; Luna/high cleanup review found no blocker after stale wording corrections. Focused query-contract tests9/9PASS, zero failures/errors/skips. No production/native changes and no signing/version ledger reservation yet.
 
-**Next:** commit/push cleanup and diagnostic fix, require core/android/server/emulator/signing-workflow terminal-success at the new exact SHA, then run supported private candidate signing and independently verify/copy ARM64 APK plus guide to Desktop. No merge/tag/public release/deployment. Keep checkout clean for signing; save post-commit CI/delivery receipts under ignored artifacts so source SHA remains exact. Physical/provider acceptance and F36/F37 remain open.
+Fresh3Nov fixture build **PASS28s**, exit0,57tasks UP-TO-DATE (`phase12-ci-grid-fixture-resume-build.log`); this verifies compilation/package state, not native execution. No production changes. Luna/high review found no concrete blocker and retained runtime verification as required.
+
+**Next:** commit/push the two-line test fix and this checkpoint, record new exact SHA/run in ignored delivery receipt, require core/android/server/emulator/signing-workflow terminal-success, then supported private candidate signing and independently verified Desktop ARM64 APK plus guide. Schedule a quiet10-minute continuation while CI runs; disable it after delivery or required user action. No merge/tag/public release/deployment. Keep checkout clean for signing; save post-commit CI/delivery receipts under ignored artifacts so source SHA remains exact. Physical/provider acceptance and F36/F37 remain open.
 
 ## Phase12 observed evidence
 

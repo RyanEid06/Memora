@@ -84,6 +84,8 @@ class LibrarySelectionTest {
         }
         showLibrary(LibraryLayout.GRID)
         waitForVisible(setOf(first.id, second.id))
+        compose.waitUntil(10_000) { compose.onNodeWithTag("library_grid").isDisplayed() }
+        compose.onNodeWithTag("library_grid").performScrollToNode(hasTestTag("item_grid_card_${first.id}"))
         compose.onNodeWithTag("item_grid_card_${first.id}").performTouchInput { longClick() }
         selectAllVisible()
         compose.runOnIdle { assertEquals(setOf(first.id, second.id), vm.selectedItemIds.value) }
