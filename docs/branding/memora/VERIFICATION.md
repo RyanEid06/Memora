@@ -1,6 +1,10 @@
 # Memora appearance delivery ledger
 
-## Current release evidence
+## Current 1.0.4 launcher verification
+
+The 4 November maintenance source replaces the black-framed launcher with full-bleed artwork. Original files are preserved. Python asset/QA checks pass6/6 after reproducing the prior frame in two failing regressions; AndroidTest assembly and lint pass. Circle/squircle source-mask previews show the complete emblem without the black border. Native CI and permanent signing remain gates for the exact source; per-release results and checksums belong to the published release and owner-local signed receipt, not earlier source results.
+
+## Historical 1.0.3 release evidence
 
 Official1.0.3/code6 APK/tag source `f8376484aa5f0788a93ee7415d873ad09d6266f8` passed [all five exact-source CI jobs](https://github.com/RyanEid06/memora/actions/runs/41590418751). The owner original artwork is preserved; the launcher uses its safe-zone correction. Local asset tests3/3 and the separate optimized100/100 functional gate passed. Phone/landscape/tablet/Overview screenshots and original-image/source hashes are recorded in `artifacts/remediation-20261027/phase12-final-source-images-verified.json` and the [root checkpoint](../../../CODEX_WORKLOG.md). Official hashes and receipts are in `artifacts/release-v1.0.3-official/`. Physical launcher/OEM/accessibility acceptance remains pending.
 

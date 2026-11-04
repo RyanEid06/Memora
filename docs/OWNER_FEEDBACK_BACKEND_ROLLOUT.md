@@ -1,6 +1,8 @@
-# Prepared owner-feedback backend rollout
+# Historical owner-feedback backend rollout plan
 
-Status: prepared locally; **not deployed**. The approved owner-feedback candidate needs the new public signed registration route before automatic AI setup can work against the hosted service. The deployed backend and earlier code4/code5 APKs remain separate from the current1.0.3/code6 remediation candidate. This document is the concrete rollout checklist; authorization to deploy is still required.
+**Current scope (4 November 2026):** backend changes and AI acceptance were explicitly skipped by the owner for the1.0.4 maintenance release. Render's dashboard showed existing deployed source `f8376484aa5f0788a93ee7415d873ad09d6266f8` during read-only inspection; this is not live authenticated/provider proof. No database or host configuration was changed. The checklist below preserves the earlier proposed rollout and must not be read as current deployment authorization or current verification.
+
+Historical context: the owner-feedback candidate introduced public signed registration while retaining the existing credential contract.
 
 ## Changes ready for review
 

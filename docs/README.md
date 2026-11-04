@@ -6,7 +6,7 @@
 - [Permanent release procedure](branding/memora/RELEASE.md) and [encrypted backup format](BACKUP_FORMAT.md)
 - [Root checkpoint](../CODEX_WORKLOG.md): current branch, evidence, failures and next action
 - [42-finding remediation plan](Memora_42_Finding_Remediation_Plan.md), [audit](Memora_Debug_Audit.md) and [review/rulings](CODEX_REMEDIATION_REVIEW_2026_10_27.md)
-- [Owner-feedback requirements](CODEX_OWNER_FEEDBACK_2026_10_24.md) and [backend rollout awaiting authorization](OWNER_FEEDBACK_BACKEND_ROLLOUT.md)
+- [Owner-feedback requirements](CODEX_OWNER_FEEDBACK_2026_10_24.md) and [historical backend rollout plan; excluded from this pass](OWNER_FEEDBACK_BACKEND_ROLLOUT.md)
 - [Deferred backend persistence design](CODEX_PHASE11_SHARED_STATE_DESIGN.md): F36/F37 remain open
 
 ## Retained release evidence
