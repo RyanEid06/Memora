@@ -349,6 +349,7 @@ class LocalSearchUiTest {
             compose.runOnIdle { assertEquals(50, vm.selectedItemIds.value.size) }
             compose.runOnUiThread { vm.clearSelection() }
             val container = compose.onNodeWithTag(if (layout == LibraryLayout.LIST) "library_list" else "library_grid")
+            compose.waitUntil(10_000) { container.isDisplayed() }
             container.performScrollToNode(hasTestTag("load_more_results"))
             compose.onNodeWithTag("load_more_results").performClick()
             compose.waitUntil(10_000) { vm.resultsReady.value && vm.localSearchResults.value.size == 75 }
