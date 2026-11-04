@@ -10,14 +10,13 @@ Your personal library, always within reach. Save notes, links, photos, videos, v
 - **Keep control:** original files stay local, App Lock protects access, Trash supports recovery, and passphrase-encrypted backups support moving your library.
 - **Make it yours:** Light, Dark and System appearance, adaptive layouts, reminders and editable English voice input.
 
-## Releases and current work
+## Releases
 
-| Channel | Version | Status |
-| --- | --- | --- |
-| [Public release](https://github.com/RyanEid06/personal-library/releases/tag/v1.0.1) | 1.0.1 / code3 | Published; physical-device and live-provider limitations are recorded in the release evidence. |
-| Private QA candidate | 1.0.3 / code6 | Remediation branch; exact-source CI, permanent signing and verified delivery are required before installation. |
+Current source: **1.0.4 / versionCode 7**. Download the permanent-signed ARM64 or universal APK and SHA-256 checksums from [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest).
 
-The private candidate adds bounded indexing and AI retrieval, Room schema9, paged search, GIF animation under Video, voice recovery, adaptive layouts and privacy-safe diagnostics. It retains `com.personallibrary.app`, the permanent signing identity and existing supported database/backup upgrade code; physical migration and restore acceptance remain pending. A higher version code supports updating an existing permanently signed installation in place. **Back up first; stop if Android requests uninstall or reports a signature conflict.** Verification-only debug/optimizedCheck APKs use a different certificate.
+This maintenance update removes the launcher icon’s black border, preserves application behavior, refreshes public repository metadata, and pins the Gradle distribution checksum. It uses the existing application ID and permanent signing identity so supported installations can update in place.
+
+Version 1.0.3 adds bounded indexing and AI retrieval, Room schema9, paged search, GIF animation under Video, voice recovery, adaptive layouts and privacy-safe diagnostics. It retains `com.personallibrary.app`, the permanent signing identity and existing supported database/backup upgrade code; physical migration and restore acceptance remain pending. A higher version code supports updating an existing permanently signed installation in place. **Back up first; stop if Android requests uninstall or reports a signature conflict.** Verification-only debug/optimizedCheck APKs use a different certificate.
 
 [Current status](docs/STATUS.md) · [Installation and owner testing](docs/HANDOFF.md) · [Documentation](docs/README.md) · [Working checkpoint](CODEX_WORKLOG.md)
 
@@ -25,7 +24,7 @@ The private candidate adds bounded indexing and AI retrieval, Room schema9, page
 
 Local library browsing, text search and bundled OCR work offline. Optional AI sends bounded representations of eligible content to the configured backend/provider; pause analysis or exclude items and folders to control future processing. Provider credentials belong only on the server. App Lock and encrypted backups protect different parts of the workflow; keep your backup passphrase safe.
 
-The backend has no content-library database. Runtime revocations, consumed nonces and rate budgets remain process-local; restart and replica persistence are deferred findings F36/F37. Environment-configured revocations reload on restart. The candidate's automatic registration route requires a separately approved backend rollout; local tests do not establish deployed or live-provider acceptance. See [backend setup and limits](server/README.md).
+The backend has no content-library database. Runtime revocations, consumed nonces and rate budgets remain process-local; restart and replica persistence are deferred findings F36/F37. Environment-configured revocations reload on restart. Backend persistence and deployment changes are outside this maintenance release; local tests do not establish live-provider acceptance. See [backend setup and limits](server/README.md).
 
 ## Build and verify
 
@@ -41,7 +40,7 @@ Use JDK21, Android platform36.1 and build-tools36.0.0 with the checked-in Gradle
 
 From `server/`: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`.
 
-[GitHub Actions](https://github.com/RyanEid06/personal-library/actions/workflows/android.yml) checks core, Android, server, emulator and signing-workflow behavior. Fake-provider CI and emulator results remain separate from physical-phone, OEM, accessibility and live-provider acceptance. Private signing requires all five jobs to pass on the exact committed source; see [candidate build procedure](docs/QA_CANDIDATE_BUILD.md).
+[GitHub Actions](https://github.com/RyanEid06/memora/actions/workflows/android.yml) checks core, Android, server, emulator and signing-workflow behavior. Fake-provider CI and emulator results remain separate from physical-phone, OEM, accessibility and live-provider acceptance. Signing requires all five jobs to pass on the exact committed source; see the [permanent release procedure](docs/branding/memora/RELEASE.md).
 
 ## Project structure
 

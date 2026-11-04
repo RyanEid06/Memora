@@ -1,0 +1,9 @@
+title = "Memora secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Published permanent keystore file SHA-256 (integrity checksum, not a credential)"
+regexTarget = "secret"
+regexes = ['''(?i)^908e801ee64fad19978a8d30e3e5951c4a3955bf59154aea32182f0ef1c2fad8$''']

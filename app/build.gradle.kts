@@ -90,8 +90,8 @@ android {
         applicationId = "com.personallibrary.app"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.0.3"
+        versionCode = 7
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_BACKEND_URL", "\"https://personal-library-backend-49w7.onrender.com\"")

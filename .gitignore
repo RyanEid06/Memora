@@ -27,3 +27,24 @@ test-results/
 *.p12
 *.pfx
 *.credential.xml
+
+# Local secrets and private runtime data
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+keystore.properties
+signing.properties
+*.pem
+*.key
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.tmp
+*.hprof
+__pycache__/
+.vscode/
+coverage/

@@ -1,6 +1,6 @@
-"""Package owner-supplied artwork; preserve exact originals in docs/branding/memora.
+"""Package approved Memora artwork; preserve exact originals in docs/branding/memora.
 
-Development-only dependency: Pillow. No recoloring, redrawing or AI generation.
+Development-only dependency: Pillow. Launcher uses the full-bleed border-removal edit.
 """
 from pathlib import Path
 from PIL import Image
@@ -31,14 +31,13 @@ def wordmark(source: str, target: str) -> None:
 wordmark("wordmark-dark-original.png", "memora_wordmark_dark.png")
 wordmark("wordmark-light-original.png", "memora_wordmark_light.png")
 
-launcher = Image.open(ORIGINALS / "launcher-original.png").convert("RGB")
-# Legacy icons retain the owner's entire canvas at 70%, with a stable navy gutter.
-master = Image.new("RGB", (512, 512), "#1E293B")
-master.paste(launcher.resize((358, 358), Image.Resampling.LANCZOS), (77, 77))
+launcher = Image.open(ORIGINALS.parent / "launcher-fullbleed.png").convert("RGB")
+# Android supplies the mask; the branded background must reach every icon edge.
+master = launcher.resize((512, 512), Image.Resampling.LANCZOS)
 master.save(DRAWABLE / "memora_launcher.png", optimize=True)
-# Adaptive foreground: 108dp canvas, independent 66dp original; never pad the legacy master twice.
-foreground = Image.new("RGBA", (1080, 1080))
-foreground.paste(launcher.resize((660, 660), Image.Resampling.LANCZOS), (210, 210))
+# The 90dp image covers the 72dp viewport while keeping the emblem inside the safe zone.
+foreground = launcher.resize((1080, 1080), Image.Resampling.LANCZOS).convert("RGBA")
+foreground.paste(launcher.resize((900, 900), Image.Resampling.LANCZOS), (90, 90))
 foreground.save(DRAWABLE / "memora_launcher_foreground.png", optimize=True)
 for density, pixels in [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)]:
     folder = RES / f"mipmap-{density}"

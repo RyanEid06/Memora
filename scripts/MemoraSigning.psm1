@@ -3,8 +3,8 @@ $ErrorActionPreference = 'Stop'
 
 function Get-MemoraSigningIdentity {
     [pscustomobject]@{
-        KeystorePath = 'C:\Users\Administrator\Documents\Memora-Signing\memora-release.p12'
-        CredentialPath = 'C:\Users\Administrator\Documents\Memora-Signing\memora-signing.credential.xml'
+        KeystorePath = Join-Path ([Environment]::GetFolderPath('MyDocuments', 'DoNotVerify')) 'Memora-Signing/memora-release.p12'
+        CredentialPath = Join-Path ([Environment]::GetFolderPath('MyDocuments', 'DoNotVerify')) 'Memora-Signing/memora-signing.credential.xml'
         KeyAlias = 'memora-release'
         KeystoreSha256 = '908E801EE64FAD19978A8D30E3E5951C4A3955BF59154AEA32182F0EF1C2FAD8'
         CertificateSha256 = '98686D31BFE4370CC30024439B56D9E72DE71C081951D31F5D4FDD31D4EB0598'

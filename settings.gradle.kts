@@ -19,7 +19,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Personal Library"
+rootProject.name = "Memora"
 include(":core")
 if (providers.gradleProperty("coreOnly").orNull != "true") {
     include(":app")

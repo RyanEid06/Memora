@@ -1,10 +1,23 @@
 # Memora V1 permanent release procedure and audit
 
-Application ID is permanently `com.personallibrary.app`. Current official version is **1.0.1 / versionCode 3**. The first official release was 1.0.0/code2. The existing owner key is the only permitted official signing identity; see [SIGNING_IDENTITY](SIGNING_IDENTITY.md). Do not generate another key or rename the package. Future updates use the same certificate and a larger versionCode.
+Application ID is permanently `com.personallibrary.app`. The latest published version is **1.0.3 / versionCode 6**. The next official build is **1.0.4 / versionCode 7**, reserved for the repository cleanup and wrapper-integrity release; signing and publication require exact-source CI. The first official release was 1.0.0/code2. The existing owner key is the only permitted official signing identity; see [SIGNING_IDENTITY](SIGNING_IDENTITY.md). Do not generate another key or rename the package. Future updates use the same certificate and a larger versionCode.
 
-## Official release — v1.0.1
+## Official release — v1.0.3
 
-[V1.0.1](https://github.com/RyanEid06/personal-library/releases/tag/v1.0.1) uses the same permanent certificate and package, version1.0.1/code3. APK source `5ac62b4ccbcdacdf6144827c8f09a3cfdeca5125` passed all five jobs in [CI39389151689](https://github.com/RyanEid06/personal-library/actions/runs/39389151689) before authorized main integration and signing. The later annotated release-tag commit changes documentation only and must pass all five jobs independently before publication; the already verified code3 APKs are reused without resigning that documentation commit. Full phase evidence and hashes are in [the worklog](../../CODEX_V1_0_1_WORKLOG.md).
+[V1.0.3](https://github.com/RyanEid06/memora/releases/tag/v1.0.3) was explicitly authorized by the owner on 3 November 2026, including main integration and removal of the merged QA branch. APK/tag source `f8376484aa5f0788a93ee7415d873ad09d6266f8` passed all five jobs in [CI41590418751](https://github.com/RyanEid06/memora/actions/runs/41590418751), then main was fast-forwarded to that same commit. The supported clean-main signing entry point produced the official pair and advanced the official ledger to code6. Three unrelated untracked files were temporarily parked and restored with identical hashes; no release guard was bypassed.
+
+| APK | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Memora-v1.0.3-arm64-official.apk | 18,440,156 | `51A44435CF6F14F062DE562F1DB0A3200B6611BB51E079E6A465AAE011CCBFD3` |
+| Memora-v1.0.3-universal.apk | 48,477,079 | `B79B86ACC8C5464F16D337638A5BB3ABCB6CE402CF2CE5E526343532D561EFD1` |
+
+Both official files are byte-identical to the independently verified private candidate. Permanent certificate/package/version, ABI/OCR, ZIP alignment and ARM64 ELF16KiB checks passed. Files, checksums and frozen pair receipts are retained in ignored `artifacts/release-v1.0.3-official/`; only ARM64 and its guide are delivered on Desktop. The release includes both APKs and SHA256SUMS.txt. Later documentation cleanup does not change the APK/tag source or require rebuilding the certified bytes.
+
+Hosted Debug and optimized instrumentation each finished 111 tests:99PASS/12explicit environment or opt-in skips/0FAIL. Separate local optimized100/100 has zero skips; local Debug101 passing unique executions span groups/reruns. Physical update/data retention, OEM/media/speech/accessibility, restore and realistic large-library acceptance remain pending. Backend rollout/live-provider acceptance is separate; F36/F37 server persistence remains deferred. See [current status](../../STATUS.md) and [owner handoff](../../HANDOFF.md).
+
+## Historical official release — v1.0.1
+
+[V1.0.1](https://github.com/RyanEid06/memora/releases/tag/v1.0.1) uses the same permanent certificate and package, version1.0.1/code3. APK source `5ac62b4ccbcdacdf6144827c8f09a3cfdeca5125` passed all five jobs in [CI39389151689](https://github.com/RyanEid06/memora/actions/runs/39389151689) before authorized main integration and signing. The later annotated release-tag commit changes documentation only and must pass all five jobs independently before publication; the already verified code3 APKs are reused without resigning that documentation commit. Full phase evidence and hashes are in [the worklog](../../CODEX_V1_0_1_WORKLOG.md).
 
 | APK | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -15,7 +28,7 @@ Official outputs are retained in `artifacts/release-v1.0.1-official/`. The exist
 
 ## First official release — v1.0.0
 
-The first official release is published at [GitHub Releases](https://github.com/RyanEid06/personal-library/releases/tag/v1.0.0). It contains the permanently signed `Memora-v1.0.0-arm64-official.apk` and `Memora-v1.0.0-universal.apk`. Release assets include their SHA-256 checksums; the ignored `artifacts/release-v1/FINAL_VERIFICATION.md` keeps the full CI, APK, certificate and runtime audit. The signed APKs were built from `1c42f958f3e663d2e547a266670bae4fb54e5214` after its five-job run [38959696966](https://github.com/RyanEid06/personal-library/actions/runs/38959696966) passed. The later release-tag commit contains documentation changes only, has its own five-job green run, and changes no Android, build or signing inputs. Both APKs passed package/version, permanent-certificate, ABI/OCR, zipalign and ARM64 16 KB ELF checks. That historical release used version1.0.0/code2; application ID `com.personallibrary.app` remains fixed.
+The first official release is published at [GitHub Releases](https://github.com/RyanEid06/memora/releases/tag/v1.0.0). It contains the permanently signed `Memora-v1.0.0-arm64-official.apk` and `Memora-v1.0.0-universal.apk`. Release assets include their SHA-256 checksums; the ignored `artifacts/release-v1/FINAL_VERIFICATION.md` keeps the full CI, APK, certificate and runtime audit. The signed APKs were built from `1c42f958f3e663d2e547a266670bae4fb54e5214` after its five-job run [38959696966](https://github.com/RyanEid06/memora/actions/runs/38959696966) passed. The later release-tag commit contains documentation changes only, has its own five-job green run, and changes no Android, build or signing inputs. Both APKs passed package/version, permanent-certificate, ABI/OCR, zipalign and ARM64 16 KB ELF checks. That historical release used version1.0.0/code2; application ID `com.personallibrary.app` remains fixed.
 
 Physical-phone acceptance remains owner work. The CI/emulator evidence does not establish real WhatsApp/OEM behavior, paired live Gemini quality, fresh-device restore, accessibility or retrieval/performance acceptance.
 
@@ -29,7 +42,7 @@ The nonofficial `optimizedCheck` build inherits release optimization and is nond
 
 First local optimized verification builds measured 18,512,896 bytes ARM64 (17.66 MiB) and 48,549,819 bytes universal (46.30 MiB), against 112,766,321 bytes (107.54 MiB) debug. These are measured verification artifacts, not guaranteed signed-output sizes. Native libraries and offline OCR assets matched byte-for-byte. Only AGP-generated `assets/dexopt/baseline.prof` and `baseline.profm` may differ from debug. Actual signed-output sizes/hashes are recorded in ignored `artifacts/release-v1/official-size-analysis.json` and `official-release.json`.
 
-Historical permanent-signing pass starting source: `71dbfa187bcba5b37c7ed3ab7c834627915cd514`, clean main matching fetched origin/main. Both run [38887322456](https://github.com/RyanEid06/personal-library/actions/runs/38887322456) and the newer exact-starting-SHA run [38889923807](https://github.com/RyanEid06/personal-library/actions/runs/38889923807) failed Android test-APK compilation: MemoraAppearanceTest imports Espresso without its direct dependency. The fix declares `androidx.test.espresso:espresso-core:3.6.1`, matching the pinned AndroidX test stack. All appearance assertions, artwork and app behavior are preserved.
+Historical permanent-signing pass starting source: `71dbfa187bcba5b37c7ed3ab7c834627915cd514`, clean main matching fetched origin/main. Both run [38887322456](https://github.com/RyanEid06/memora/actions/runs/38887322456) and the newer exact-starting-SHA run [38889923807](https://github.com/RyanEid06/memora/actions/runs/38889923807) failed Android test-APK compilation: MemoraAppearanceTest imports Espresso without its direct dependency. The fix declares `androidx.test.espresso:espresso-core:3.6.1`, matching the pinned AndroidX test stack. All appearance assertions, artwork and app behavior are preserved.
 
 CI actions use current supported majors: checkout v7, setup-java v6, setup-node v7, upload-artifact v7, setup-android v4, and setup-gradle v6 with the basic caching provider. The remaining Node 20 warning in setup-android v3 was found in the complete final-checkpoint log; the maintained v4 uses Node 24. Gradle, AGP, Kotlin, Room, Compose and application dependencies stay pinned. The release workflow also checks that missing credentials, a wrong alias, a wrong path and configuration caching with signing credentials all fail. No production key is supplied to CI.
 
@@ -40,12 +53,12 @@ Historical checkpoint `22149d9ca2b8397d057ebf90bbd5d3c8d5371bcf` passed all four
 From the owner's already-open PowerShell session containing the temporary signing environment variables, run once:
 
 ```powershell
-& 'C:\Users\Administrator\Desktop\Projects\personal-library\scripts\Setup-MemoraSigning.ps1'
+.\scripts\Setup-MemoraSigning.ps1
 ```
 
 Setup validates the existing canonical key's file hash, private certificate and expected fingerprint without creating any key. It encrypts SecureString password fields with Windows **current-user DPAPI** and restricts the file ACL to the current Windows SID. The credential/config file is outside the repository:
 
-`C:\Users\Administrator\Documents\Memora-Signing\memora-signing.credential.xml`
+`<Documents>\Memora-Signing\memora-signing.credential.xml`
 
 Only this Windows user on this PC can decrypt the DPAPI payload. No AES key, portable/plaintext fallback, permanent environment variable or repository credential is created. Setup uses existing process variables silently; if absent, it offers a hidden prompt only during setup. An absent PKCS12 key password uses the store password. After successful setup, the temporary password environment variables are removed from that PowerShell process. Setup never builds an APK. An intentional credential reset uses `-Replace`. Protect the original keystore/password independently: a DPAPI file is not a portable key backup. [Microsoft DPAPI/CLIXML behavior](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/export-clixml).
 
@@ -56,7 +69,7 @@ For the separate V1.0.1 hardening-branch QA candidate, use the explicitly gated 
 After required exact-source CI jobs pass, future releases need only:
 
 ```powershell
-& 'C:\Users\Administrator\Desktop\Projects\personal-library\scripts\Build-MemoraRelease.ps1'
+.\scripts\Build-MemoraRelease.ps1 -VerifiedSourceSha <green-main-SHA>
 ```
 
 The script resolves HEAD automatically, verifies clean main and fetched origin/main, then requires core/android/server/emulator and the Windows signing-workflow job to succeed on that exact SHA. An optional `-VerifiedSourceSha <full-SHA>` pins an explicitly reviewed candidate. SDK selection uses ANDROID_HOME, ANDROID_SDK_ROOT, the prepared ignored `.tools/android-sdk`, then the usual local SDK directory; `-AndroidSdkRoot` can select it explicitly. SDK build-tools 36.0.0 and the canonical Documents key/hash remain required.
@@ -65,13 +78,13 @@ If Windows PowerShell execution policy blocks local scripts, use a process-only 
 
 Only after preflight does the script decrypt the local DPAPI profile and expose passwords in its process/Gradle child environment for the build. It never prompts for a future build password. Missing, corrupt or wrong-user profiles fail clearly. Environment values are restored and SecureStrings disposed in `finally`; configuration caching is disabled, native output is captured in memory only, and no password is passed as a command argument. Never put a password in a transcript, chat, source, documentation or GitHub; never enable Gradle debug logs/build scans for a signed build.
 
-Package/certificate remain fixed. Version metadata is read from verified source and checked against the APK. Current verified source declares1.0.1/code3; the initial official release was1.0.0/code2. A public `memora-last-release.json` beside the keystore prevents a changed source release reusing the previous versionCode; later versions must increase it. No install/uninstall occurs.
+Package/certificate remain fixed. Version metadata is read from verified source and checked against the APK. Historical V1.0.1 verified source declares1.0.1/code3; the initial official release was1.0.0/code2. A public `memora-last-release.json` beside the keystore prevents a changed source release reusing the previous versionCode; later versions must increase it. No install/uninstall occurs.
 
 Gradle attaches permanent identity validation to every Release task, including aggregate/abbreviated invocations that select those tasks. Missing configuration cannot fall back to unsigned release output or a debug key. Validation checks the canonical path, file SHA-256, alias, private-key availability, RSA 4096-bit certificate, validity and expected certificate fingerprint. It emits only sanitized failure messages.
 
 The release command builds `:app:assembleRelease -PmemoraPhoneApks=true` with configuration caching disabled. Both fresh outputs must pass apksigner, exact package/version/certificate, ABI/OCR, ARM64 ELF and zipalign `-c -P 16 4` checks. Use `-OutputDirectory <repository-artifact-directory>` to retain both verified outputs outside Desktop, then copy/hash only the requested ARM64 file to Desktop. V1.0.1 names are `Memora-v1.0.1-arm64-official.apk` and `Memora-v1.0.1-universal.apk`; future names follow the source versionName.
 
-Both output copies are staged and hashed first. Documents `memora-last-release.json` stores both artifacts before publication; a staging/ledger failure publishes neither, and same-source retries are safe. Pair provenance validates both artifact hashes/types and their common source/version/identity; legacy single-artifact records remain supported. Only both verified outputs plus the final `official-release.json` establish build delivery. If a later filesystem replacement fails, a valid first copy/reservation can remain; retry the same-source command. No debug/unsigned file is placed at an official filename. The default script output is Desktop for both variants; the current ARM64-only Desktop delivery explicitly uses the custom repository output directory.
+Both output copies are staged and hashed first. Documents `memora-last-release.json` stores both artifacts before publication; a staging/ledger failure publishes neither, and same-source retries are safe. Pair provenance validates both artifact hashes/types and their common source/version/identity; legacy single-artifact records remain supported. Only both verified outputs plus the final `official-release.json` establish build delivery. If a later filesystem replacement fails, a valid first copy/reservation can remain; retry the same-source command. No debug/unsigned file is placed at an official filename. The default script output is Desktop for both variants; the historical ARM64-only Desktop delivery used a custom repository output directory. Current maintenance delivery includes both variants and checksums.
 
 Credential selection prefers current-user DPAPI. If the profile is absent, the owner's temporary process signing environment is also supported without a password argument or output. If neither exists, signing stops clearly. Run Setup-MemoraSigning.ps1 once for future one-command updates. Both ABI artifacts share a versionCode; increase it for every changed-source update.
 

@@ -1,6 +1,8 @@
-# Owner-local Memora QA candidate
+# Historical owner-local Memora QA candidate procedure
 
-This private candidate contains the post-release QA fixes and approved 24 October owner-feedback changes for owner acceptance. The current official public release remains V1.0.1 / code 3. Earlier certified V1.0.2/code4 and code5 candidates are preserved; current remediation source targets V1.0.3/code6 and requires fresh exact-source CI.
+The code6 private handoff is complete and superseded by the owner-authorized [official V1.0.3 release](https://github.com/RyanEid06/memora/releases/tag/v1.0.3) on 3 November 2026. Exact source `f8376484aa5f0788a93ee7415d873ad09d6266f8` passed all five jobs in [CI41590418751](https://github.com/RyanEid06/memora/actions/runs/41590418751); the same source was integrated into main and signed through the official entry point. The merged QA branch was retired. Earlier certified candidate pairs/receipts remain preserved. Physical acceptance remains open.
+
+The retained procedure below describes that private mode and its branch-specific checks; it is not a request to recreate the retired branch or repeat signing. Use the [permanent release procedure](branding/memora/RELEASE.md) for official builds. Future candidate publication still requires explicit owner authorization and exact-source verification.
 
 After the final implementation and QA checkpoint is committed and pushed to `codex/v1.0.1-final-qa`, wait for that exact source SHA to have a completed successful `android.yml` run with all five required jobs (`core`, `android`, `server`, `emulator`, `signing-workflow`) completed successfully. Then use the existing owner-local signing setup:
 

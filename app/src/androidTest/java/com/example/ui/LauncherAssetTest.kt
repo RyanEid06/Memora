@@ -14,7 +14,7 @@ import java.io.File
 /** Renders the installed package icon through Android's real adaptive drawable implementation. */
 @RunWith(AndroidJUnit4::class)
 class LauncherAssetTest {
-    @Test fun installedAdaptiveIconKeepsMeaningfulArtworkInsideSafeZone() {
+    @Test fun installedAdaptiveIconFillsMaskWithoutBlackBorder() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val icon = context.packageManager.getApplicationIcon(context.packageName)
         assertTrue("This platform must exercise the packaged adaptive icon", icon is AdaptiveIconDrawable)
@@ -22,17 +22,19 @@ class LauncherAssetTest {
         icon.setBounds(0, 0, 720, 720)
         icon.draw(Canvas(bitmap))
         var coloredPixels = 0
-        var maxRadiusSquared = 0.0
+        var blackBorderPixels = 0
         for (y in 0 until 720) for (x in 0 until 720) {
             val pixel = bitmap.getPixel(x, y)
             if (Color.alpha(pixel) > 128 && maxOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) > 100) {
                 coloredPixels++
-                maxRadiusSquared = maxOf(maxRadiusSquared, (x - 359.5) * (x - 359.5) + (y - 359.5) * (y - 359.5))
             }
+            val radiusSquared = (x - 359.5) * (x - 359.5) + (y - 359.5) * (y - 359.5)
+            if (Color.alpha(pixel) > 250 && radiusSquared > 240.0 * 240.0 &&
+                maxOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) <= 8) blackBorderPixels++
         }
         assertTrue("Packaged icon must contain the original artwork", coloredPixels > 30_000)
-        assertTrue("Meaningful artwork must stay within the central66dp circle at a72dp viewport", maxRadiusSquared <= 335.0 * 335.0)
-        File(context.cacheDir, "phase8-icon-native.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        assertTrue("Only isolated shadow pixels are allowed, never the black export border", blackBorderPixels <= 720 * 720 / 10000)
+        File(context.cacheDir, "launcher-fullbleed-native.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }
 }

@@ -18,7 +18,7 @@ Created: 2026-10-16
 
 Local owner path:
 
-`C:\Users\Administrator\Documents\Memora-Signing\memora-release.p12`
+`<Documents>\Memora-Signing\memora-release.p12`
 
 Keystore file SHA-256:
 
