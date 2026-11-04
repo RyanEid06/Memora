@@ -29,12 +29,13 @@ class LauncherAssetTest {
                 coloredPixels++
             }
             val radiusSquared = (x - 359.5) * (x - 359.5) + (y - 359.5) * (y - 359.5)
-            if (Color.alpha(pixel) > 250 && radiusSquared > 240.0 * 240.0 &&
+            // Adaptive icons enlarge the artwork; inspect the rim beyond the emblem's drop shadows.
+            if (Color.alpha(pixel) > 250 && radiusSquared > 340.0 * 340.0 &&
                 maxOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) <= 8) blackBorderPixels++
         }
-        assertTrue("Packaged icon must contain the original artwork", coloredPixels > 30_000)
-        assertTrue("Only isolated shadow pixels are allowed, never the black export border", blackBorderPixels <= 720 * 720 / 10000)
         File(context.cacheDir, "launcher-fullbleed-native.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        assertTrue("Packaged icon must contain the original artwork", coloredPixels > 30_000)
+        assertTrue("Only isolated shadow pixels are allowed, never the black export border: $blackBorderPixels pixels", blackBorderPixels <= 720 * 720 / 10000)
         bitmap.recycle()
     }
 }

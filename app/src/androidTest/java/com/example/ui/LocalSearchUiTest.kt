@@ -259,6 +259,13 @@ class LocalSearchUiTest {
         val local = seed()
         val related = seed("celebration", indexedToken = false)
         val hidden = seed("different topic", indexedToken = false)
+        // Finish Room's source refresh before testing selection against the injected AI rows.
+        compose.waitUntil(10_000) { vm.items.value.map { it.item.id }.containsAll(listOf(local.id, related.id, hidden.id)) }
+        compose.runOnUiThread {
+            vm.setSearchQuery("$token nohit")
+            vm.setSearchQuery(token)
+        }
+        waitForResults(setOf(local.id))
         val relatedRow = ItemWithCollections(related, emptyList())
         var fakeAi by mutableStateOf(listOf(
             SemanticSearchResult(ItemWithCollections(local, emptyList()), "Local duplicate", 3f),
