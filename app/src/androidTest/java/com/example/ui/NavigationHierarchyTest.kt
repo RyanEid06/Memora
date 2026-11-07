@@ -53,6 +53,9 @@ class NavigationHierarchyTest {
         compose.onNodeWithTag("col_card_favorites").performClick()
         compose.onNodeWithTag("nav_item_collections").assertIsSelected()
         compose.onNodeWithContentDescription("Back to Collections").assertIsDisplayed()
+        compose.onNodeWithTag("clear_filters_button").assertDoesNotExist()
+        compose.onNodeWithTag("locked_collection_scope").assertDoesNotExist()
+        compose.runOnUiThread { vm.selectKind(ItemKind.TEXT) }
         compose.onNodeWithTag("clear_filters_button").performScrollTo().performClick()
         compose.runOnIdle { org.junit.Assert.assertEquals("computed_favorites", vm.selectedCollectionId.value) }
         compose.onNodeWithTag("nav_item_library").performClick()
@@ -70,6 +73,8 @@ class NavigationHierarchyTest {
         compose.onNodeWithTag("col_card_favorites").performClick()
         compose.onNodeWithTag("library_search_input").performTextReplacement("Synthetic Favorites query")
         Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("clear_filters_button").assertDoesNotExist()
+        compose.runOnUiThread { vm.selectKind(ItemKind.TEXT) }
         compose.onNodeWithTag("clear_filters_button").performScrollTo().performClick()
         compose.runOnIdle { org.junit.Assert.assertEquals("computed_favorites", vm.selectedCollectionId.value) }
         compose.onNodeWithTag("nav_item_library").performClick()
@@ -241,8 +246,9 @@ class NavigationHierarchyTest {
             compose.onNodeWithTag("edit_item_button").assertIsDisplayed()
             InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
             compose.onNodeWithTag("edit_item_button").assertDoesNotExist()
-            scrollLibraryTo(container, hasTestTag("active_type_chip"))
-            clickLibraryTarget(container, hasTestTag("active_type_chip"))
+            compose.onNodeWithTag("active_type_chip").assertDoesNotExist()
+            scrollLibraryTo(container, hasTestTag("filter_chip_all"))
+            clickLibraryTarget(container, hasTestTag("filter_chip_all"))
             compose.runOnIdle { org.junit.Assert.assertNull(vm.selectedKind.value) }
             compose.runOnUiThread { vm.selectKind(ItemKind.TEXT) }
             scrollLibraryTo(container, hasTestTag("clear_filters_button"))

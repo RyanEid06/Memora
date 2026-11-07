@@ -139,7 +139,7 @@ fun SettingsScreen(
                 pendingExportPassphrase = pass
                 showExportPassphraseDialog = false
                 try {
-                    exportBackupLauncher.launch("PersonalLibrary_Backup_${System.currentTimeMillis()}.plb")
+                    exportBackupLauncher.launch("Memora_Backup_${System.currentTimeMillis()}.plb")
                 } catch (_: Exception) {
                     pendingExportPassphrase?.fill('\u0000')
                     pendingExportPassphrase = null
@@ -545,9 +545,9 @@ fun SettingsScreen(
                         Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("Biometric App Lock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("App Lock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                text = if (isLockEnabled) "Locks in background; hides screenshots and app previews" else "No lock enabled",
+                                text = "Fingerprint or device screen lock",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )

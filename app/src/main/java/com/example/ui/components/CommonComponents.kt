@@ -59,7 +59,7 @@ fun TypeFilterChipStrip(
         modifier = modifier
             .fillMaxWidth()
             .testTag("type_filter_strip"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {

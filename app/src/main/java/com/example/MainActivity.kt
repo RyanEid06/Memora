@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ import com.example.ui.screens.CollectionsScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TrashScreen
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import com.example.ui.theme.PersonalLibraryTheme
 
@@ -56,6 +58,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
     private var notificationTargetItemId by mutableStateOf<String?>(null)
+    private var activityForeground = false
     private val appLockPreferences by lazy { getSharedPreferences("app_lock_prefs", Context.MODE_PRIVATE) }
     private val appLockPreferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == null || key == "lock_enabled") applyAppLockTaskPrivacy()
@@ -64,8 +67,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         com.example.ui.theme.ThemePreferences.applyActivityTheme(this)
         super.onCreate(savedInstanceState)
+        // Reconnect the callback to an in-flight AndroidX prompt after recreation.
+        viewModel.appLockManager.bindAuthentication(this)
         applyAppLockTaskPrivacy()
         appLockPreferences.registerOnSharedPreferenceChangeListener(appLockPreferenceListener)
+        lifecycleScope.launch {
+            viewModel.appLockManager.isLocked.collect { if (it) requestAutomaticUnlock() }
+        }
         enableEdgeToEdge()
         notificationTargetItemId = intent?.getStringExtra(ReminderReceiver.EXTRA_ITEM_ID)
 
@@ -175,19 +183,65 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onDestroy()
     }
 
+    private fun requestAutomaticUnlock() {
+        if (!activityForeground) return
+        window.decorView.post {
+            if (activityForeground && !isFinishing && !isDestroyed) {
+                viewModel.appLockManager.authenticate(this, onSuccess = {}, onError = {}, automatic = true)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        activityForeground = true
+        viewModel.appLockManager.onActivityForegrounded()
+        requestAutomaticUnlock()
+    }
+
     override fun onPause() {
         super.onPause()
         // Some transitions skip the top-resumed callback.
-        if (!isChangingConfigurations) {
-            viewModel.appLockManager.lock()
+        activityForeground = false
+        viewModel.appLockManager.onActivityBackgrounded(isChangingConfigurations)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        activityForeground = false
+        viewModel.appLockManager.onActivityBackgrounded(isChangingConfigurations)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        activityForeground = false
+        viewModel.appLockManager.onUserLeftActivity()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) viewModel.appLockManager.onAuthenticationWindowFocused()
+    }
+
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        // AndroidX BiometricFragment.launchConfirmCredentialActivity uses this action;
+        // its handoff must not be mistaken for a user leaving via Home/Overview.
+        if (intent.action == "android.app.action.CONFIRM_DEVICE_CREDENTIAL") {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NO_USER_ACTION)
         }
+        super.startActivityForResult(intent, requestCode, options)
     }
 
     override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
         super.onTopResumedActivityChanged(isTopResumedActivity)
         // Overview can remove the top position while keeping this activity resumed.
-        if (!isTopResumedActivity && !isChangingConfigurations) {
-            viewModel.appLockManager.lock()
+        activityForeground = isTopResumedActivity
+        if (isTopResumedActivity) {
+            viewModel.appLockManager.onActivityForegrounded()
+            requestAutomaticUnlock()
+        } else {
+            viewModel.appLockManager.onActivityBackgrounded(isChangingConfigurations)
         }
     }
 

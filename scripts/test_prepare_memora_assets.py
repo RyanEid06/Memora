@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,7 +37,8 @@ class LauncherAssetsTest(unittest.TestCase):
             black_border_pixels = sum(
                 max(pixels[x, y]) <= 8
                 for y in range(512) for x in range(512)
-                if (x - 255.5) ** 2 + (y - 255.5) ** 2 > 175 ** 2
+                # Sample the outer rim, beyond the enlarged emblem's own shadow.
+                if (x - 255.5) ** 2 + (y - 255.5) ** 2 > 240 ** 2
             )
             self.assertLessEqual(black_border_pixels, 512 * 512 // 10000,
                                  "Only isolated emblem shadow pixels are allowed, never the black export frame")
@@ -60,6 +61,47 @@ class LauncherAssetsTest(unittest.TestCase):
             with Image.open(ROOT / "docs/branding/memora/launcher-fullbleed.png") as source:
                 expected = source.convert("RGB").resize((900, 900), Image.Resampling.LANCZOS)
                 self.assertIsNone(ImageChops.difference(layer.crop((90, 90, 990, 990)).convert("RGB"), expected).getbbox())
+
+    def test_adaptive_background_extends_one_image_without_a_nested_square(self):
+        with Image.open(self.res / "drawable-nodpi/memora_launcher_foreground.png") as layer:
+            layer = layer.convert("RGB")
+            # Outside the single artwork image, continue its boundary pixels. A second
+            # larger copy creates the reported square seam and fails these comparisons.
+            for actual_box, edge_box in [
+                ((0, 90, 90, 990), (90, 90, 91, 990)),
+                ((990, 90, 1080, 990), (989, 90, 990, 990)),
+                ((90, 0, 990, 90), (90, 90, 990, 91)),
+                ((90, 990, 990, 1080), (90, 989, 990, 990)),
+            ]:
+                actual = layer.crop(actual_box)
+                expected = layer.crop(edge_box).resize(actual.size, Image.Resampling.NEAREST)
+                self.assertIsNone(ImageChops.difference(actual, expected).getbbox(),
+                                  "Adaptive background must extend one image, never composite two scales")
+
+    def test_legacy_and_adaptive_symbols_are_large_and_survive_launcher_masks(self):
+        for name, box in [("memora_launcher.png", None),
+                          ("memora_launcher_foreground.png", (180, 180, 900, 900))]:
+            with Image.open(self.res / "drawable-nodpi" / name) as image:
+                viewport = image.convert("RGB")
+                if box:
+                    viewport = viewport.crop(box)
+                viewport = viewport.resize((360, 360), Image.Resampling.LANCZOS)
+                artwork = Image.new("L", viewport.size)
+                artwork.putdata([255 if (r > 170 and g > 90 and b < 140) or
+                                (r < 120 and g > 150 and b > 150) else 0
+                                for r, g, b in viewport.getdata()])
+                bounds = artwork.getbbox()
+                self.assertGreaterEqual(bounds[2] - bounds[0], 250, name)
+                self.assertGreaterEqual(bounds[3] - bounds[1], 220, name)
+                for shape in ("circle", "squircle"):
+                    mask = Image.new("L", viewport.size)
+                    draw = ImageDraw.Draw(mask)
+                    if shape == "circle":
+                        draw.ellipse((0, 0, 359, 359), fill=255)
+                    else:
+                        draw.rounded_rectangle((0, 0, 359, 359), radius=80, fill=255)
+                    removed = ImageChops.subtract(artwork, mask).histogram()[255]
+                    self.assertEqual(removed, 0, f"{name}: {shape} clips the approved symbol")
 
 
 if __name__ == "__main__":

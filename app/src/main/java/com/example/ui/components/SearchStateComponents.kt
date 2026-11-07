@@ -10,6 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.CollectionEntity
 import com.example.model.DateBasis
@@ -19,10 +21,10 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-fun hasSearchFilters(collectionId: String?, kind: ItemKind?, dateFilter: DateFilter): Boolean =
-    collectionId != null || kind != null || dateFilter != DateFilter.ALL_TIME
+fun hasSearchFilters(collectionId: String?, kind: ItemKind?, dateFilter: DateFilter, collectionLocked: Boolean = false): Boolean =
+    (collectionId != null && !collectionLocked) || kind != null || dateFilter != DateFilter.ALL_TIME
 
-/** Shared by Library and Search so inherited constraints are always visible. */
+/** Browsing scope is shown by the title; only user-clearable constraints belong here. */
 @Composable
 fun ActiveSearchFilters(
     collectionId: String?,
@@ -36,53 +38,63 @@ fun ActiveSearchFilters(
     onClearKind: () -> Unit,
     onClearDate: () -> Unit,
     onClearFilters: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier.padding(horizontal = 16.dp),
     collectionLocked: Boolean = false
 ) {
-    if (!hasSearchFilters(collectionId, kind, dateFilter)) return
-    Column(modifier.fillMaxWidth().testTag("active_search_filters")) {
-        // Keep Clear Filters outside the scrolling row, including at large font sizes.
-        TextButton(onClick = onClearFilters, modifier = Modifier.align(Alignment.End).testTag("clear_filters_button")) {
-            Text("Clear Filters", maxLines = 1, softWrap = false)
-        }
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth().testTag("active_filter_chips")
-        ) {
-            if (collectionId != null) item {
-                val name = when (collectionId) {
-                    "computed_favorites" -> "Favorites"
-                    "computed_unfiled" -> "Inbox"
-                    "computed_due" -> "Reminders"
-                    else -> collections.find { it.id == collectionId }?.name ?: "Collection"
+    if (!hasSearchFilters(collectionId, kind, dateFilter, collectionLocked)) return
+    Row(modifier.fillMaxWidth().testTag("active_search_filters"),
+        verticalAlignment = Alignment.CenterVertically) {
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val chipWidth = maxWidth
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().testTag("active_filter_chips")
+            ) {
+                if (collectionId != null && !collectionLocked) item {
+                    val name = when (collectionId) {
+                        "computed_favorites" -> "Favorites"
+                        "computed_unfiled" -> "Inbox"
+                        "computed_due" -> "Reminders"
+                        else -> collections.find { it.id == collectionId }?.name ?: "Collection"
+                    }
+                    ActiveFilterChip("Collection: $name", "active_collection_chip", "Clear collection", chipWidth, onClearCollection)
                 }
-                if (collectionLocked) SuggestionChip(onClick = {}, label = { Text(name) }, modifier = Modifier.testTag("locked_collection_scope"))
-                else ActiveFilterChip("Collection: $name", "active_collection_chip", "Clear collection", onClearCollection)
-            }
-            if (kind != null) item {
-                ActiveFilterChip("Type: ${kind.displayName}", "active_type_chip", "Clear type", onClearKind)
-            }
-            if (dateFilter != DateFilter.ALL_TIME) item {
-                val range = if (dateFilter == DateFilter.CUSTOM && customStart != null && customEnd != null) {
-                    val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
-                    val zone = ZoneId.systemDefault()
-                    "${formatter.format(Instant.ofEpochMilli(customStart).atZone(zone))} – ${formatter.format(Instant.ofEpochMilli(customEnd).atZone(zone))}"
-                } else dateFilter.label
-                ActiveFilterChip("${dateBasis.label}: $range", "active_date_chip", "Clear date", onClearDate)
+                if (kind != null) item {
+                    ActiveFilterChip("Type: ${kind.displayName}", "active_type_chip", "Clear type", chipWidth, onClearKind)
+                }
+                if (dateFilter != DateFilter.ALL_TIME) item {
+                    val range = if (dateFilter == DateFilter.CUSTOM && customStart != null && customEnd != null) {
+                        val formatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
+                        val zone = ZoneId.systemDefault()
+                        "${formatter.format(Instant.ofEpochMilli(customStart).atZone(zone))} – ${formatter.format(Instant.ofEpochMilli(customEnd).atZone(zone))}"
+                    } else dateFilter.label
+                    ActiveFilterChip("${dateBasis.label}: $range", "active_date_chip", "Clear date", chipWidth, onClearDate)
+                }
             }
         }
+        ClearSearchFiltersButton(onClearFilters)
     }
 }
 
 @Composable
-private fun ActiveFilterChip(label: String, tag: String, clearDescription: String, onClear: () -> Unit) {
+internal fun ClearSearchFiltersButton(onClear: () -> Unit) {
+    TextButton(
+        onClick = onClear,
+        modifier = Modifier.widthIn(max = 112.dp).testTag("clear_filters_button"),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Text("Clear Filters", textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun ActiveFilterChip(label: String, tag: String, clearDescription: String, maxWidth: Dp, onClear: () -> Unit) {
     InputChip(
         selected = true,
         onClick = onClear,
-        label = { Text(label) },
+        label = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         trailingIcon = { Icon(Icons.Filled.Close, contentDescription = clearDescription, modifier = Modifier.size(16.dp)) },
-        modifier = Modifier.testTag(tag)
+        modifier = Modifier.widthIn(max = maxWidth).testTag(tag)
     )
 }
 
@@ -95,7 +107,8 @@ fun LibraryResultState(
     query: String,
     filtersActive: Boolean,
     onClearFilters: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    collectionScope: String? = null
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp).testTag("library_result_state"),
@@ -111,17 +124,29 @@ fun LibraryResultState(
             else -> {
                 Text(
                     when {
-                        libraryEmpty -> "Your library is empty"
+                        query.isNotBlank() -> "No results found"
                         filtersActive -> "No items match these filters"
+                        collectionScope == "computed_favorites" -> "No favorites yet"
+                        collectionScope == "computed_unfiled" -> "Inbox is empty"
+                        collectionScope == "computed_due" -> "No reminders yet"
+                        collectionScope != null -> "This collection is empty"
+                        libraryEmpty -> "Your library is empty"
                         else -> "No results found"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    if (libraryEmpty) "Add a note, save a link, or import files to get started."
-                    else if (query.isNotBlank()) "Try different keywords or clear your filters."
-                    else "Clear your filters to see more items.",
+                    when {
+                        query.isNotBlank() && filtersActive -> "Try different keywords or clear your filters."
+                        query.isNotBlank() -> "Try different keywords."
+                        filtersActive -> "Clear your filters to see more items."
+                        collectionScope == "computed_favorites" -> "Mark an item as a favorite to find it here."
+                        collectionScope == "computed_unfiled" -> "Items without a collection appear here."
+                        collectionScope == "computed_due" -> "Set a reminder on an item to find it here."
+                        collectionScope != null -> "Add items to this collection to see them here."
+                        else -> "Add a note, save a link, or import files to get started."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )

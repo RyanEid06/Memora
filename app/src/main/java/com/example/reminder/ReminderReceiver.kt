@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
+import com.example.R
 import com.example.data.LibraryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,28 @@ class ReminderReceiver : BroadcastReceiver() {
         const val EXTRA_REMINDER_TIME = "extra_reminder_time"
         const val ACTION_COMPLETE = "com.example.reminder.ACTION_COMPLETE"
         const val ACTION_SNOOZE = "com.example.reminder.ACTION_SNOOZE"
+
+        private val notificationPostLock = Any()
+
+        private fun reminderBuilder(context: Context, open: PendingIntent?) =
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_memora_notification)
+                .setAutoCancel(true)
+                .setContentIntent(open)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        private fun protectedReminder(context: Context, open: PendingIntent?) = reminderBuilder(context, open)
+            .setContentTitle("Memora Reminder")
+            .setContentText("You have a protected item reminder")
+
+        internal fun protectPostedNotifications(context: Context) = synchronized(notificationPostLock) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            // Keep already-delivered reminders reachable, but replace any private content and actions.
+            manager.activeNotifications.filter { it.notification.channelId == CHANNEL_ID }.forEach { posted ->
+                manager.notify(posted.tag, posted.id, protectedReminder(context, posted.notification.contentIntent)
+                    .setOnlyAlertOnce(true).build())
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -41,6 +64,10 @@ class ReminderReceiver : BroadcastReceiver() {
     internal suspend fun handleIntent(context: Context, intent: Intent, repository: LibraryRepository) {
         val itemId = intent.getStringExtra(EXTRA_ITEM_ID) ?: return
         val action = intent.action
+        val appLockPrefs = context.getSharedPreferences("app_lock_prefs", Context.MODE_PRIVATE)
+        val isMutation = action == ACTION_COMPLETE || action == ACTION_SNOOZE
+        // Old notification PendingIntents remain valid after App Lock is enabled.
+        if (isMutation && appLockPrefs.getBoolean("lock_enabled", false)) return
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val item = repository.dao.getItemById(itemId)
         val reminder = repository.dao.getReminderByItemId(itemId)
@@ -54,6 +81,7 @@ class ReminderReceiver : BroadcastReceiver() {
         if (intent.hasExtra(EXTRA_REMINDER_TIME) && intent.getLongExtra(EXTRA_REMINDER_TIME, Long.MIN_VALUE) != current.dueMillis) return
         // Legacy notifications lack a generation timestamp; their actions cannot affect a future replacement.
         if (current.dueMillis > System.currentTimeMillis()) return
+        if (isMutation && appLockPrefs.getBoolean("lock_enabled", false)) return
 
         if (action == ACTION_COMPLETE) {
             repository.completeReminder(itemId)
@@ -101,54 +129,48 @@ class ReminderReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Notification Privacy: check if App Lock is enabled
-        val appLockPrefs = context.getSharedPreferences("app_lock_prefs", Context.MODE_PRIVATE)
-        val isLockEnabled = appLockPrefs.getBoolean("lock_enabled", false)
+        // Serialize posting with lock-enable redaction so a concurrent alarm cannot leave a private notification behind.
+        synchronized(notificationPostLock) {
+            if (appLockPrefs.getBoolean("lock_enabled", false)) {
+                notificationManager.notify(itemId, 0, protectedReminder(context, pendingIntent).build())
+                return
+            }
+            // Snooze Intent (15 minutes)
+            val snoozeIntent = Intent(context, ReminderReceiver::class.java).apply {
+                this.action = ACTION_SNOOZE
+                data = ReminderScheduler.itemUri(itemId)
+                putExtra(EXTRA_ITEM_ID, itemId)
+                putExtra(EXTRA_ITEM_TITLE, itemTitle)
+                putExtra(EXTRA_REMINDER_TIME, current.dueMillis)
+            }
+            val snoozePendingIntent = PendingIntent.getBroadcast(
+                context,
+                itemId.hashCode() + 1,
+                snoozeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        val title = if (isLockEnabled) "Memora Reminder" else "Reminder: $itemTitle"
-        val message = if (isLockEnabled) "You have a protected item reminder" else "Tap to view this saved item in Memora"
+            // Complete Intent
+            val completeIntent = Intent(context, ReminderReceiver::class.java).apply {
+                this.action = ACTION_COMPLETE
+                data = ReminderScheduler.itemUri(itemId)
+                putExtra(EXTRA_ITEM_ID, itemId)
+                putExtra(EXTRA_REMINDER_TIME, current.dueMillis)
+            }
+            val completePendingIntent = PendingIntent.getBroadcast(
+                context,
+                itemId.hashCode() + 2,
+                completeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        // Snooze Intent (15 minutes)
-        val snoozeIntent = Intent(context, ReminderReceiver::class.java).apply {
-            this.action = ACTION_SNOOZE
-            data = ReminderScheduler.itemUri(itemId)
-            putExtra(EXTRA_ITEM_ID, itemId)
-            putExtra(EXTRA_ITEM_TITLE, itemTitle)
-            putExtra(EXTRA_REMINDER_TIME, current.dueMillis)
+            val notification = reminderBuilder(context, pendingIntent)
+                .setContentTitle("Reminder: $itemTitle")
+                .setContentText("Tap to view this saved item in Memora")
+                .addAction(android.R.drawable.ic_menu_recent_history, "Snooze 15m", snoozePendingIntent)
+                .addAction(android.R.drawable.checkbox_on_background, "Complete", completePendingIntent)
+            notificationManager.notify(itemId, 0, notification.build())
         }
-        val snoozePendingIntent = PendingIntent.getBroadcast(
-            context,
-            itemId.hashCode() + 1,
-            snoozeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Complete Intent
-        val completeIntent = Intent(context, ReminderReceiver::class.java).apply {
-            this.action = ACTION_COMPLETE
-            data = ReminderScheduler.itemUri(itemId)
-            putExtra(EXTRA_ITEM_ID, itemId)
-            putExtra(EXTRA_REMINDER_TIME, current.dueMillis)
-        }
-        val completePendingIntent = PendingIntent.getBroadcast(
-            context,
-            itemId.hashCode() + 2,
-            completeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_menu_recent_history, "Snooze 15m", snoozePendingIntent)
-            .addAction(android.R.drawable.checkbox_on_background, "Complete", completePendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build()
-
-        notificationManager.notify(itemId, 0, notification)
     }
 
     private fun cancelNotification(manager: NotificationManager, itemId: String) {

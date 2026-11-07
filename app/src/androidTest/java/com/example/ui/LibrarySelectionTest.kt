@@ -56,15 +56,18 @@ class LibrarySelectionTest {
         showLibrary(LibraryLayout.LIST)
         waitForVisible(setOf(first.id, second.id))
         compose.waitUntil(10_000) { compose.onNodeWithTag("item_card_${first.id}").isDisplayed() }
+        compose.onNodeWithTag("fab_add").assertIsDisplayed()
         compose.onNodeWithTag("item_card_${first.id}").performTouchInput { longClick() }
         compose.waitUntil(10_000) { compose.onNodeWithText("1 selected").isDisplayed() }
         compose.onNodeWithText("1 selected").assertIsDisplayed()
+        compose.onNodeWithTag("fab_add").assertDoesNotExist()
         compose.onNodeWithTag("item_card_${second.id}").performClick()
         compose.onNodeWithText("2 selected").assertIsDisplayed()
         compose.onNodeWithTag("item_card_${first.id}").performClick()
         compose.onNodeWithText("1 selected").assertIsDisplayed()
         Espresso.pressBack()
         compose.onNodeWithTag("batch_cancel_button").assertDoesNotExist()
+        compose.onNodeWithTag("fab_add").assertIsDisplayed()
         assertActive(first.id, second.id)
     }
 

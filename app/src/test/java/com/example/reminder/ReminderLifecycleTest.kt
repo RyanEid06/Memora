@@ -26,6 +26,7 @@ class ReminderLifecycleTest {
     private val future get() = System.currentTimeMillis() + 120_000
     @Before fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        context.getSharedPreferences("app_lock_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         shadowOf(context as android.app.Application).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         database = Room.inMemoryDatabaseBuilder(context, LibraryRoomDatabase::class.java).addCallback(DATABASE_CALLBACK).build()
         repository = LibraryRepository(context, database)
@@ -98,6 +99,41 @@ class ReminderLifecycleTest {
         assertEquals(2, notifications.size)
         val ids = notifications.map { shadowOf(it.actions[0].actionIntent).savedIntent.getStringExtra(ReminderReceiver.EXTRA_ITEM_ID) }.toSet()
         assertEquals(setOf("Aa", "BB"), ids)
+    }
+
+    @Test fun protectedReminderHidesContentAndMutationActionsButStillOpensItem() = runBlocking {
+        val item = source("protected", due = System.currentTimeMillis() - 100)
+        context.getSharedPreferences("app_lock_prefs", Context.MODE_PRIVATE).edit().putBoolean("lock_enabled", true).commit()
+        ReminderReceiver().handleIntent(context, intent(item.id, item.reminderTime!!), repository)
+        val notification = shadowOf(context.getSystemService(NotificationManager::class.java)).allNotifications.single()
+        assertEquals("Memora Reminder", notification.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertEquals("You have a protected item reminder", notification.extras.getString(android.app.Notification.EXTRA_TEXT))
+        assertTrue(notification.actions.isNullOrEmpty())
+        assertEquals(item.id, shadowOf(notification.contentIntent).savedIntent.getStringExtra(ReminderReceiver.EXTRA_ITEM_ID))
+        assertEquals(com.example.R.drawable.ic_memora_notification, notification.smallIcon.resId)
+    }
+
+    @Test fun enablingAppLockRejectsPreviouslyIssuedAndDirectMutationActions() = runBlocking {
+        val item = source("previously_unlocked", due = System.currentTimeMillis() - 100)
+        val receiver = ReminderReceiver()
+        receiver.handleIntent(context, intent(item.id, item.reminderTime!!), repository)
+        val notifications = shadowOf(context.getSystemService(NotificationManager::class.java))
+        val notification = notifications.allNotifications.single()
+        val staleActions = notification.actions.map { shadowOf(it.actionIntent).savedIntent }
+        com.example.security.AppLockManager(context).setLockEnabled(true)
+        val redacted = notifications.allNotifications.single()
+        assertEquals("Memora Reminder", redacted.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertTrue(redacted.actions.isNullOrEmpty())
+        assertEquals(notification.contentIntent, redacted.contentIntent)
+        for (action in staleActions + listOf(
+            intent(item.id, item.reminderTime!!, ReminderReceiver.ACTION_COMPLETE),
+            intent(item.id, item.reminderTime!!, ReminderReceiver.ACTION_SNOOZE)
+        )) receiver.handleIntent(context, action, repository)
+        assertFalse(repository.dao.getReminderByItemId(item.id)!!.isDone)
+        assertFalse(repository.dao.getItemById(item.id)!!.isReminderDone)
+        assertEquals(item.reminderTime, repository.dao.getReminderByItemId(item.id)!!.dueMillis)
+        assertEquals(item.reminderTime, repository.dao.getItemById(item.id)!!.reminderTime)
+        assertEquals(0, alarmCount())
     }
 
     @Test fun validSnoozeSchedulesFutureReminderAndCompleteCancelsIt() = runBlocking {

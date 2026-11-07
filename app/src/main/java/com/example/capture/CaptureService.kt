@@ -12,6 +12,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.PersonalLibraryApp
+import com.example.R
 import com.example.data.LibraryRepository
 import com.example.indexing.LocalIndexWorker
 import com.example.model.SharePayload
@@ -38,7 +39,7 @@ class CaptureService : Service() {
         if (batchId == null || store.state.value.batchId != batchId) { stopSelf(); return START_NOT_STICKY }
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val cancel = PendingIntent.getService(this, 1, Intent(this, CaptureService::class.java).setAction(CANCEL), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notification = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download)
+        val notification = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_memora_notification)
             .setContentTitle("Saving to your library").setContentText("Copying original files to this phone")
             .setContentIntent(open).addAction(0, "Cancel", cancel).setOngoing(true).setProgress(0, 0, true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()

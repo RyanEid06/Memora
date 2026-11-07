@@ -12,7 +12,9 @@ Your personal library, always within reach. Save notes, links, photos, videos, v
 
 ## Releases
 
-Current source: **1.0.4 / versionCode 7**. Download the permanent-signed ARM64 or universal APK and SHA-256 checksums from [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest).
+Current source is **1.0.4 / versionCode 7**. This update enlarges the launcher artwork, opens Android authentication automatically when Memora is locked, and protects reminder actions behind App Lock. The Library has more compact filters, collection-specific empty states, and a smaller Add button on phones. New exports suggest `Memora_Backup_<timestamp>.plb` and existing `.plb` backups still restore.
+
+Download the latest published, permanently signed ARM64 or universal APK and its SHA-256 checksum from [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest).
 
 This maintenance update removes the launcher icon’s black border, preserves application behavior, refreshes public repository metadata, and pins the Gradle distribution checksum. It uses the existing application ID and permanent signing identity so supported installations can update in place.
 

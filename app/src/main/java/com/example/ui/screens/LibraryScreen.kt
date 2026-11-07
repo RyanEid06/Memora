@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -40,6 +41,7 @@ import com.example.ui.components.ItemGridCard
 import com.example.ui.components.TypeFilterChipStrip
 import com.example.ui.components.SelectionActions
 import com.example.ui.components.ActiveSearchFilters
+import com.example.ui.components.ClearSearchFiltersButton
 import com.example.ui.components.LibraryResultState
 import com.example.ui.components.hasSearchFilters
 import com.example.ui.components.AiAnswerCard
@@ -82,6 +84,7 @@ fun LibraryScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val isBatchMode by viewModel.isBatchMode.collectAsStateWithLifecycle()
     val selectedItemIds by viewModel.selectedItemIds.collectAsStateWithLifecycle()
+    val filtersActive = hasSearchFilters(selectedColId, selectedKind, dateFilter, collectionLocked = collectionScope != null)
     val snackbarHost = remember { SnackbarHostState() }
     BackHandler(enabled = isBatchMode) { viewModel.clearSelection() }
     LaunchedEffect(viewModel) {
@@ -184,17 +187,25 @@ fun LibraryScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onOpenAddDialog,
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Add") },
-                modifier = Modifier.testTag("fab_add").semantics { contentDescription = "Add" }
-            )
+            if (!isBatchMode) BoxWithConstraints {
+                val fabModifier = Modifier.testTag("fab_add").semantics { contentDescription = "Add" }
+                if (maxWidth < 600.dp) FloatingActionButton(
+                    onClick = onOpenAddDialog,
+                    shape = CircleShape,
+                    modifier = fabModifier
+                ) { Icon(Icons.Filled.Add, contentDescription = null) }
+                else ExtendedFloatingActionButton(
+                    onClick = onOpenAddDialog,
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Add") },
+                    modifier = fabModifier
+                )
+            }
         }
     ) { innerPadding ->
         // Share the existing vertical lazy host so short screens can reach both controls and results.
-        val libraryHeaders = listOf<@Composable () -> Unit>(
-            {
+        val libraryHeaders = buildList<@Composable () -> Unit> {
+            add {
                 // Search Input Row with Mic button
                 Row(
                     modifier = Modifier
@@ -239,8 +250,10 @@ fun LibraryScreen(
                             .testTag("library_search_input")
                     )
                 }
-            },
-            {
+            }
+            if (collectionScope == "computed_unfiled" ||
+                (searchState.hasPreviousResults && (searchState.showProgress || localSearchError != null)) ||
+                aiError != null || aiAnswer != null) add {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (collectionScope == "computed_unfiled") Text("Items without a folder appear here.", style = MaterialTheme.typography.bodySmall)
                     if (searchState.showProgress && searchState.hasPreviousResults)
@@ -251,34 +264,39 @@ fun LibraryScreen(
                     aiError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("ai_search_error")) }
                     aiAnswer?.let { AiAnswerCard(it, onOpenItemDetail) }
                 }
-            },
-            {
+            }
+            add {
                 Column {
-                    TextButton(onClick = { filtersExpanded = !filtersExpanded },
-                        modifier = Modifier.padding(horizontal = 6.dp).testTag("filters_sort_button")) {
-                        Icon(Icons.Filled.FilterList, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (filtersExpanded) "Hide filters / sort" else "Filters / Sort")
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { filtersExpanded = !filtersExpanded },
+                            modifier = Modifier.weight(1f, fill = false).testTag("filters_sort_button"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)) {
+                            Icon(Icons.Filled.FilterList, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (filtersExpanded) "Hide filters" else "Filters / Sort")
+                        }
+                        if (filtersExpanded && filtersActive) ClearSearchFiltersButton(viewModel::clearFilters)
                     }
                     if (filtersExpanded) TypeFilterChipStrip(
                         selectedKind = selectedKind,
                         onKindSelected = { viewModel.selectKind(it) }
                     )
                 }
-            },
-            {
+            }
+            if (!filtersExpanded && filtersActive) add {
                 ActiveSearchFilters(
                     selectedColId, collections, selectedKind, dateFilter, dateBasis, customStart, customEnd,
                     onClearCollection = { viewModel.selectCollection(null) },
                     onClearKind = { viewModel.selectKind(null) },
                     onClearDate = { viewModel.setDateFilter(DateFilter.ALL_TIME) },
                     onClearFilters = viewModel::clearFilters,
+                    modifier = Modifier.padding(horizontal = if (libraryLayout == LibraryLayout.GRID) 4.dp else 16.dp),
                     collectionLocked = collectionScope != null
                 )
-            },
-            {
+            }
+            if (filtersExpanded) add {
                 // Scroll controls as a unit so long labels and large text do not clip.
-                if (filtersExpanded) Row(
+                Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -385,14 +403,14 @@ fun LibraryScreen(
                     }
                 }
             }
-        )
+        }
         val showResultState = (!searchState.hasPreviousResults && (searchState.showProgress || localSearchError != null)) ||
             (resultsReady && items.isEmpty() && !isAiSearching && aiAnswer == null)
         val resultState: @Composable () -> Unit = {
             Box(Modifier.fillMaxWidth().heightIn(min = 160.dp).padding(16.dp), contentAlignment = Alignment.Center) {
                 LibraryResultState(
                     resultsReady, localSearchError, allItems.isEmpty(), searchQuery,
-                    hasSearchFilters(selectedColId, selectedKind, dateFilter), viewModel::clearFilters
+                    filtersActive, viewModel::clearFilters, collectionScope = collectionScope
                 )
             }
         }
@@ -406,7 +424,7 @@ fun LibraryScreen(
                     .padding(innerPadding)
                     .padding(horizontal = 12.dp)
                     .testTag("library_grid"),
-                contentPadding = PaddingValues(bottom = 88.dp, top = 4.dp),
+                contentPadding = PaddingValues(bottom = if (isBatchMode) 16.dp else 96.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -457,7 +475,7 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .testTag("library_list"),
-                contentPadding = PaddingValues(bottom = 88.dp, top = 4.dp)
+                contentPadding = PaddingValues(bottom = if (isBatchMode) 16.dp else 96.dp, top = 4.dp)
             ) {
                 libraryHeaders.forEachIndexed { index, header ->
                     item(key = "library_header_$index") { header() }

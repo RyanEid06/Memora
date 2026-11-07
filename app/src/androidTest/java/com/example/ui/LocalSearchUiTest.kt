@@ -77,7 +77,7 @@ class LocalSearchUiTest {
             }
         }
         waitForResults(emptySet())
-        compose.onNodeWithText("No items match these filters").assertIsDisplayed()
+        compose.onNodeWithText("No results found").assertIsDisplayed()
         compose.onNodeWithText("Your library is empty").assertDoesNotExist()
         compose.onNodeWithTag("active_filter_chips").performScrollToNode(hasTestTag("active_collection_chip"))
         compose.onNodeWithTag("active_collection_chip").assertTextContains("Collection: Synthetic chosen collection")
@@ -153,17 +153,20 @@ class LocalSearchUiTest {
         var ready by mutableStateOf(true)
         var error by mutableStateOf<String?>(null)
         var libraryEmpty by mutableStateOf(true)
+        var query by mutableStateOf("")
         var filters by mutableStateOf(false)
         var cleared = false
         compose.runOnUiThread {
             compose.activity.setContent {
-                PersonalLibraryTheme { LibraryResultState(ready, error, libraryEmpty, "synthetic", filters, { cleared = true }) }
+                PersonalLibraryTheme { LibraryResultState(ready, error, libraryEmpty, query, filters, { cleared = true }) }
             }
         }
         compose.onNodeWithText("Your library is empty").assertIsDisplayed()
-        compose.runOnIdle { libraryEmpty = false }
+        compose.runOnIdle { query = "synthetic" }
         compose.onNodeWithText("No results found").assertIsDisplayed()
         compose.runOnIdle { filters = true }
+        compose.onNodeWithText("No results found").assertIsDisplayed()
+        compose.runOnIdle { query = ""; libraryEmpty = false }
         compose.onNodeWithText("No items match these filters").assertIsDisplayed()
         compose.onNodeWithTag("empty_clear_filters_button").performClick()
         compose.runOnIdle { assertTrue(cleared); ready = false }

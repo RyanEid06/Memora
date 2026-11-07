@@ -3,7 +3,7 @@
 Development-only dependency: Pillow. Launcher uses the full-bleed border-removal edit.
 """
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 ORIGINALS = ROOT / "docs/branding/memora/originals"
@@ -32,12 +32,18 @@ wordmark("wordmark-dark-original.png", "memora_wordmark_dark.png")
 wordmark("wordmark-light-original.png", "memora_wordmark_light.png")
 
 launcher = Image.open(ORIGINALS.parent / "launcher-fullbleed.png").convert("RGB")
-# Android supplies the mask; the branded background must reach every icon edge.
-master = launcher.resize((512, 512), Image.Resampling.LANCZOS)
+# Match the adaptive icon's visible 72dp of a 90dp artwork image.
+inset = launcher.width // 10
+master = launcher.resize((512, 512), Image.Resampling.LANCZOS,
+                         box=(inset, inset, launcher.width - inset, launcher.height - inset))
 master.save(DRAWABLE / "memora_launcher.png", optimize=True)
-# The 90dp image covers the 72dp viewport while keeping the emblem inside the safe zone.
-foreground = launcher.resize((1080, 1080), Image.Resampling.LANCZOS).convert("RGBA")
-foreground.paste(launcher.resize((900, 900), Image.Resampling.LANCZOS), (90, 90))
+# Extend only the outermost background pixels into the adaptive motion gutter.
+artwork = launcher.resize((900, 900), Image.Resampling.LANCZOS)
+foreground = ImageOps.expand(artwork, border=90)
+foreground.paste(artwork.crop((0, 0, 1, 900)).resize((90, 900), Image.Resampling.NEAREST), (0, 90))
+foreground.paste(artwork.crop((899, 0, 900, 900)).resize((90, 900), Image.Resampling.NEAREST), (990, 90))
+foreground.paste(foreground.crop((0, 90, 1080, 91)).resize((1080, 90), Image.Resampling.NEAREST), (0, 0))
+foreground.paste(foreground.crop((0, 989, 1080, 990)).resize((1080, 90), Image.Resampling.NEAREST), (0, 990))
 foreground.save(DRAWABLE / "memora_launcher_foreground.png", optimize=True)
 for density, pixels in [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)]:
     folder = RES / f"mipmap-{density}"
