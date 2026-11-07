@@ -556,6 +556,7 @@
 }
 -keep class androidx.compose.ui.text.TextLayoutResult {
   public boolean getDidOverflowHeight();
+  public boolean getHasVisualOverflow();
   public int getLineCount();
   public int getLineEnd(int, boolean);
   public float getLineLeft(int);
