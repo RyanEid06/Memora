@@ -331,6 +331,9 @@ class LocalSearchUiTest {
 
     @Test fun libraryPagesExplicitlyInListAndGridAndSelectsOnlyLoadedRows() {
         prepare()
+        compose.runOnUiThread {
+            compose.activity.setContent { PersonalLibraryTheme { LibraryScreen(vm, {}, {}, {}, {}) } }
+        }
         runBlocking {
             repeat(75) { index ->
                 val row = ItemEntity("page-ui-$token-$index", "$token $index", "Synthetic", "TEXT", createdAt = index.toLong())
@@ -346,15 +349,16 @@ class LocalSearchUiTest {
                 vm.setSearchQuery(token)
             }
             compose.waitUntil(10_000) { vm.resultsReady.value && vm.localSearchResults.value.size == 50 }
-            compose.onNodeWithText("Library • 50 loaded").assertIsDisplayed()
+            compose.waitUntil(10_000) { compose.onNodeWithText("Library • 50 loaded").isDisplayed() }
             compose.runOnUiThread { vm.beginSelection() }
             selectAllVisible()
             compose.runOnIdle { assertEquals(50, vm.selectedItemIds.value.size) }
             compose.runOnUiThread { vm.clearSelection() }
             val container = compose.onNodeWithTag(if (layout == LibraryLayout.LIST) "library_list" else "library_grid")
             compose.waitUntil(10_000) { container.isDisplayed() }
-            container.performScrollToNode(hasTestTag("load_more_results"))
-            compose.onNodeWithTag("load_more_results").performClick()
+            // Jump to the lazy item's key without walking the changing semantics tree.
+            container.performScrollToKey("load_more")
+            compose.onNodeWithTag("load_more_results").assertIsDisplayed().performClick()
             compose.waitUntil(10_000) { vm.resultsReady.value && vm.localSearchResults.value.size == 75 }
             compose.onNodeWithTag("load_more_results").assertDoesNotExist()
             compose.runOnUiThread { vm.beginSelection() }
