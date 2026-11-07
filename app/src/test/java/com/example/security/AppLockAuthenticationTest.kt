@@ -7,7 +7,6 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
-import androidx.room.MultiInstanceInvalidationService
 import androidx.test.core.app.ApplicationProvider
 import com.example.MainActivity
 import com.example.ui.MainViewModel
@@ -22,23 +21,19 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
-import org.robolectric.android.controller.ServiceController
 import java.util.concurrent.Executor
 
 /** The prompt boundary is simulated; these tests do not authenticate a real fingerprint. */
-@OptIn(androidx.room.ExperimentalRoomApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], instrumentedPackages = ["androidx.biometric"], shadows = [AppLockAuthenticationTest.PromptShadow::class])
+@Config(
+    sdk = [34],
+    instrumentedPackages = ["androidx.biometric", "androidx.room"],
+    shadows = [AppLockAuthenticationTest.PromptShadow::class, AppLockAuthenticationTest.RoomInvalidationShadow::class],
+)
 class AppLockAuthenticationTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
-    private lateinit var invalidation: ServiceController<MultiInstanceInvalidationService>
 
     @Before fun reset() {
-        val app = context as android.app.Application
-        invalidation = Robolectric.buildService(MultiInstanceInvalidationService::class.java).create()
-        val binding = Intent(app, MultiInstanceInvalidationService::class.java)
-        shadowOf(app).setComponentNameAndServiceForBindServiceForIntent(
-            binding, checkNotNull(binding.component), checkNotNull(invalidation.get().onBind(binding)))
         context.getSharedPreferences("app_lock_prefs", Context.MODE_PRIVATE).edit().putBoolean("lock_enabled", false).commit()
         PromptShadow.attempts = 0
         PromptShadow.cancellations = 0
@@ -49,7 +44,6 @@ class AppLockAuthenticationTest {
 
     @After fun close() {
         shadowOf(Looper.getMainLooper()).idle()
-        invalidation.destroy()
     }
 
     private fun launch(locked: Boolean) = Robolectric.buildActivity(MainActivity::class.java).create().apply {
@@ -295,6 +289,12 @@ class AppLockAuthenticationTest {
             manager.authenticate(controller.get(), onSuccess = {}, onError = {})
             assertEquals("A launch error must allow a manual retry", 2, PromptShadow.attempts)
         } finally { controller.pause().stop().destroy() }
+    }
+
+    @Implements(className = "androidx.room.MultiInstanceInvalidationClient", isInAndroidSdk = false)
+    class RoomInvalidationShadow {
+        // These tests use one process; don't enqueue a simulated cross-process Room bind.
+        @Implementation protected fun start(@Suppress("UNUSED_PARAMETER") serviceIntent: Intent) = Unit
     }
 
     @Implements(BiometricPrompt::class, isInAndroidSdk = false)
