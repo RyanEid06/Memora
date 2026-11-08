@@ -28,10 +28,15 @@ class LauncherAssetTest {
             if (Color.alpha(pixel) > 128 && maxOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) > 100) {
                 coloredPixels++
             }
-            val radiusSquared = (x - 359.5) * (x - 359.5) + (y - 359.5) * (y - 359.5)
-            // Adaptive icons enlarge the artwork; inspect the rim beyond the emblem's drop shadows.
-            if (Color.alpha(pixel) > 250 && radiusSquared > 340.0 * 340.0 &&
-                maxOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) <= 8) blackBorderPixels++
+            if (Color.alpha(pixel) > 250 && maxOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) <= 8) {
+                // Follow the device's actual mask so the emblem's interior shadows are excluded.
+                val onRim = x < 4 || y < 4 || x >= 716 || y >= 716 ||
+                    Color.alpha(bitmap.getPixel(x - 4, y)) < 128 ||
+                    Color.alpha(bitmap.getPixel(x + 4, y)) < 128 ||
+                    Color.alpha(bitmap.getPixel(x, y - 4)) < 128 ||
+                    Color.alpha(bitmap.getPixel(x, y + 4)) < 128
+                if (onRim) blackBorderPixels++
+            }
         }
         File(context.cacheDir, "launcher-fullbleed-native.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         assertTrue("Packaged icon must contain the original artwork", coloredPixels > 30_000)

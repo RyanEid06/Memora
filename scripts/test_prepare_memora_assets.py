@@ -31,14 +31,16 @@ class LauncherAssetsTest(unittest.TestCase):
         source = ROOT / "docs/branding/memora/originals/launcher-original.png"
         self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest().upper(),
                          "E8B9DEDBFCF568FB2F32B3A0593330D3E5BEB2625120A0D8D985650E9E3C825E")
+        approved = ROOT / "docs/branding/memora/launcher-approved.png"
+        self.assertEqual(hashlib.sha256(approved.read_bytes()).hexdigest().upper(),
+                         "E2854A128F73C31D272E644B5A87DDAA9D5C3B31FD3D837B217838C6426B8433")
         with Image.open(self.res / "drawable-nodpi/memora_launcher.png") as master:
             self.assertEqual(master.size, (512, 512))
             pixels = master.convert("RGB").load()
             black_border_pixels = sum(
                 max(pixels[x, y]) <= 8
                 for y in range(512) for x in range(512)
-                # Sample the outer rim, beyond the enlarged emblem's own shadow.
-                if (x - 255.5) ** 2 + (y - 255.5) ** 2 > 240 ** 2
+                if min(x, y, 511 - x, 511 - y) < 4
             )
             self.assertLessEqual(black_border_pixels, 512 * 512 // 10000,
                                  "Only isolated emblem shadow pixels are allowed, never the black export frame")
@@ -51,6 +53,14 @@ class LauncherAssetsTest(unittest.TestCase):
                         self.assertEqual(icon.size, (size, size))
                         self.assertIsNone(ImageChops.difference(icon.convert("RGB"), master.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)).getbbox())
 
+    def test_approved_gold_trim_reaches_the_launcher_edge(self):
+        with Image.open(self.res / "drawable-nodpi/memora_launcher_foreground.png") as layer:
+            viewport = layer.convert("RGB").crop((180, 180, 900, 900))
+            for corner in ((530, 0, 640, 75), (0, 525, 80, 655)):
+                gold = sum(r > 160 and g > 100 and r > b + 35
+                           for r, g, b in viewport.crop(corner).getdata())
+                self.assertGreater(gold, 20, f"Missing the approved gold rim in {corner}")
+
     def test_adaptive_layer_has_full_bleed_opaque_background(self):
         foreground = self.res / "drawable-nodpi/memora_launcher_foreground.png"
         with Image.open(foreground) as layer:
@@ -59,8 +69,8 @@ class LauncherAssetsTest(unittest.TestCase):
             self.assertEqual(layer.getchannel("A").getextrema(), (255, 255),
                              "Adaptive artwork must fill the whole layer; Android supplies the mask")
             with Image.open(ROOT / "docs/branding/memora/launcher-fullbleed.png") as source:
-                expected = source.convert("RGB").resize((900, 900), Image.Resampling.LANCZOS)
-                self.assertIsNone(ImageChops.difference(layer.crop((90, 90, 990, 990)).convert("RGB"), expected).getbbox())
+                expected = source.convert("RGB").resize((720, 720), Image.Resampling.LANCZOS)
+                self.assertIsNone(ImageChops.difference(layer.crop((180, 180, 900, 900)).convert("RGB"), expected).getbbox())
 
     def test_adaptive_background_extends_one_image_without_a_nested_square(self):
         with Image.open(self.res / "drawable-nodpi/memora_launcher_foreground.png") as layer:
@@ -68,10 +78,10 @@ class LauncherAssetsTest(unittest.TestCase):
             # Outside the single artwork image, continue its boundary pixels. A second
             # larger copy creates the reported square seam and fails these comparisons.
             for actual_box, edge_box in [
-                ((0, 90, 90, 990), (90, 90, 91, 990)),
-                ((990, 90, 1080, 990), (989, 90, 990, 990)),
-                ((90, 0, 990, 90), (90, 90, 990, 91)),
-                ((90, 990, 990, 1080), (90, 989, 990, 990)),
+                ((0, 180, 180, 900), (180, 180, 181, 900)),
+                ((900, 180, 1080, 900), (899, 180, 900, 900)),
+                ((180, 0, 900, 180), (180, 180, 900, 181)),
+                ((180, 900, 900, 1080), (180, 899, 900, 900)),
             ]:
                 actual = layer.crop(actual_box)
                 expected = layer.crop(edge_box).resize(actual.size, Image.Resampling.NEAREST)
@@ -86,10 +96,15 @@ class LauncherAssetsTest(unittest.TestCase):
                 if box:
                     viewport = viewport.crop(box)
                 viewport = viewport.resize((360, 360), Image.Resampling.LANCZOS)
+                # Assess the central symbol separately from the intentionally maskable rim.
+                emblem_box = (40, 48, 322, 312)
+                emblem = viewport.crop(emblem_box)
+                colors = Image.new("L", emblem.size)
+                colors.putdata([255 if (r > 170 and g > 90 and b < 140) or
+                               (r < 120 and g > 150 and b > 150) else 0
+                               for r, g, b in emblem.getdata()])
                 artwork = Image.new("L", viewport.size)
-                artwork.putdata([255 if (r > 170 and g > 90 and b < 140) or
-                                (r < 120 and g > 150 and b > 150) else 0
-                                for r, g, b in viewport.getdata()])
+                artwork.paste(colors, emblem_box[:2])
                 bounds = artwork.getbbox()
                 self.assertGreaterEqual(bounds[2] - bounds[0], 250, name)
                 self.assertGreaterEqual(bounds[3] - bounds[1], 220, name)

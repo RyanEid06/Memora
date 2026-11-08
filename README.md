@@ -12,7 +12,7 @@ Your personal library, always within reach. Save notes, links, photos, videos, v
 
 ## Releases
 
-Current source is **1.0.5 / versionCode 8**. The launcher icon uses a full-bleed dark navy background with gold accents. This update also brings the 1.0.4 maintenance changes to the public release: automatic Android authentication when Memora is locked, protected reminder actions, more compact Library filters, collection-specific empty states, and a smaller Add button on phones. New exports suggest `Memora_Backup_<timestamp>.plb` and existing `.plb` backups still restore.
+Current source is **1.0.6 / versionCode 9**, prepared for private testing. The launcher icon uses the approved glossy artwork with a full-bleed navy background and gold corner highlights. The source includes the 1.0.4 maintenance changes for App Lock, protected reminders, and Library controls. New exports suggest `Memora_Backup_<timestamp>.plb` and existing `.plb` backups still restore.
 
 Download the latest published, permanently signed ARM64 or universal APK and its SHA-256 checksum from [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest).
 

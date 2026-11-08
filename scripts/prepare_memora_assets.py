@@ -1,6 +1,6 @@
 """Package approved Memora artwork; preserve exact originals in docs/branding/memora.
 
-Development-only dependency: Pillow. Launcher uses the full-bleed border-removal edit.
+Development-only dependency: Pillow. The full-bleed master is fitted to the launcher viewport.
 """
 from pathlib import Path
 from PIL import Image, ImageOps
@@ -32,18 +32,15 @@ wordmark("wordmark-dark-original.png", "memora_wordmark_dark.png")
 wordmark("wordmark-light-original.png", "memora_wordmark_light.png")
 
 launcher = Image.open(ORIGINALS.parent / "launcher-fullbleed.png").convert("RGB")
-# Match the adaptive icon's visible 72dp of a 90dp artwork image.
-inset = launcher.width // 10
-master = launcher.resize((512, 512), Image.Resampling.LANCZOS,
-                         box=(inset, inset, launcher.width - inset, launcher.height - inset))
+master = launcher.resize((512, 512), Image.Resampling.LANCZOS)
 master.save(DRAWABLE / "memora_launcher.png", optimize=True)
-# Extend only the outermost background pixels into the adaptive motion gutter.
-artwork = launcher.resize((900, 900), Image.Resampling.LANCZOS)
-foreground = ImageOps.expand(artwork, border=90)
-foreground.paste(artwork.crop((0, 0, 1, 900)).resize((90, 900), Image.Resampling.NEAREST), (0, 90))
-foreground.paste(artwork.crop((899, 0, 900, 900)).resize((90, 900), Image.Resampling.NEAREST), (990, 90))
-foreground.paste(foreground.crop((0, 90, 1080, 91)).resize((1080, 90), Image.Resampling.NEAREST), (0, 0))
-foreground.paste(foreground.crop((0, 989, 1080, 990)).resize((1080, 90), Image.Resampling.NEAREST), (0, 990))
+# Android displays the center 72dp and reserves 18dp on each side for motion.
+artwork = launcher.resize((720, 720), Image.Resampling.LANCZOS)
+foreground = ImageOps.expand(artwork, border=180)
+foreground.paste(artwork.crop((0, 0, 1, 720)).resize((180, 720), Image.Resampling.NEAREST), (0, 180))
+foreground.paste(artwork.crop((719, 0, 720, 720)).resize((180, 720), Image.Resampling.NEAREST), (900, 180))
+foreground.paste(foreground.crop((0, 180, 1080, 181)).resize((1080, 180), Image.Resampling.NEAREST), (0, 0))
+foreground.paste(foreground.crop((0, 899, 1080, 900)).resize((1080, 180), Image.Resampling.NEAREST), (0, 900))
 foreground.save(DRAWABLE / "memora_launcher_foreground.png", optimize=True)
 for density, pixels in [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)]:
     folder = RES / f"mipmap-{density}"
