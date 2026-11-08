@@ -1,6 +1,6 @@
 # Memora owner handoff
 
-Current source is **1.0.4/code7**. Download published APKs and checksums from [the latest release](https://github.com/RyanEid06/memora/releases/latest). The records below describe the previous verified 1.0.3 handoff.
+Current source is **1.0.5 / code 8**. Download published APKs and checksums from [the latest release](https://github.com/RyanEid06/memora/releases/latest). The records below describe the historical 1.0.3 handoff.
 
 [Official release and both APK variants](https://github.com/RyanEid06/memora/releases/tag/v1.0.3). Requires Android10 or newer. Use ARM64 for ARM64 phones; the universal APK contains arm64-v8a/armeabi-v7a/x86/x86_64. Debug/optimizedCheck APKs use a different certificate.
 
@@ -8,7 +8,7 @@ Desktop: `C:\Users\Administrator\Desktop\Memora-v1.0.3-arm64-official.apk` (18,4
 
 ## Update installation
 
-Export an encrypted backup and confirm it is readable before updating. The unchanged package `com.personallibrary.app`, permanent certificate and higher versionCode7 in the current maintenance source support an in-place update from earlier permanent-signed releases/candidates. Physical preservation on the intended phone remains untested. If Android reports a signature conflict or asks to uninstall, stop and preserve the existing app/data. Do not uninstall or clear storage to continue.
+Export an encrypted backup before updating. Install the official APK over your existing installation. Version code 8, package `com.personallibrary.app`, and the permanent signing certificate support in-place upgrades from the signed 1.0.3 and 1.0.4 builds. If Android reports a signature conflict or asks to uninstall, stop and preserve the existing app and data.
 
 ## Remaining phone acceptance
 

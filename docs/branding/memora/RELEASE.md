@@ -1,6 +1,6 @@
 # Memora V1 permanent release procedure and audit
 
-Application ID is permanently `com.personallibrary.app`. The latest published version is **1.0.3 / versionCode 6**. The next official build is **1.0.4 / versionCode 7**, reserved for the repository cleanup and wrapper-integrity release; signing and publication require exact-source CI. The first official release was 1.0.0/code2. The existing owner key is the only permitted official signing identity; see [SIGNING_IDENTITY](SIGNING_IDENTITY.md). Do not generate another key or rename the package. Future updates use the same certificate and a larger versionCode.
+Application ID is permanently `com.personallibrary.app`. Current source is **1.0.5 / versionCode 8**. See [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest) for the latest published build. Signing and publication require exact-source CI. The existing owner key is the only permitted official signing identity. See [SIGNING_IDENTITY](SIGNING_IDENTITY.md). Future updates use the same package and certificate with a larger versionCode.
 
 ## Historical official release — v1.0.3
 
@@ -34,7 +34,7 @@ Physical-phone acceptance remains owner work. The CI/emulator evidence does not 
 
 ## Release implementation and verification history
 
-The original V1 implementation was published from `v1.0.0`; current1.0.4/code7 maintenance source is on main and retains the release architecture below. R8 (`isMinifyEnabled = true`) and resource shrinking (`isShrinkResources = true`) use the existing optimized default ProGuard and dependency consumer rules; no blanket keep/dontwarn rules were added. `-PmemoraPhoneApks=true` enables a standalone ARM64 split plus a genuine four-ABI universal output. Normal debug/emulator packaging is unchanged. No architecture branches/flavors or application dependency upgrades were introduced.
+The original V1 implementation was published from `v1.0.0`. R8 (`isMinifyEnabled = true`) and resource shrinking (`isShrinkResources = true`) use the optimized default ProGuard and dependency consumer rules. `-PmemoraPhoneApks=true` enables a standalone ARM64 split and a four-ABI universal APK.
 
 Optimized OCR runtime verification exposed missing public no-argument constructors in the three manifest-declared ML Kit registrars. The pinned Firebase consumer rule preserved their classes but not reflective constructors. Three exact `-keepclassmembers` rules now retain those constructors in release and optimized verification builds. This preserves bundled OCR without broad package rules or disabling shrinking; the existing real OCR instrumentation assertion remains mandatory.
 

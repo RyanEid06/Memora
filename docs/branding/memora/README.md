@@ -6,7 +6,7 @@ The owner supplied these final assets on 16 October 2026. The three PNGs in `ori
 - `wordmark-dark-original.png`: Memora Archive Logo.png; light text for dark mode.
 - `wordmark-light-original.png`: Memora Personal Archive Logo.png; dark text for light mode.
 
-The owner requested removal of the black launcher border on 4 November 2026. `launcher-fullbleed.png` is the derived border-removal edit: it retains the book/search emblem and extends its navy background to every edge. The three archived originals remain unchanged. Android supplies the launcher shape; the artwork no longer contains a second rounded-square badge or black export margin.
+For 1.0.5, `launcher-fullbleed.png` combines the approved book and magnifier with a darker navy background and gold light at the top right and bottom left. The artwork fills the launcher bounds so Android can supply the icon shape. The three archived originals remain unchanged.
 
 `scripts/prepare_memora_assets.py` packages the artwork with Pillow. Legacy density icons derive from a cropped 512×512 master that matches the scale of the adaptive viewport. The opaque 1080×1080 adaptive layer uses one 900×900 artwork image. Its outermost background pixels extend into the motion gutter, so the central 72dp viewport has a continuous background and room for the magnifier. The asset tests check original preservation, opacity, background continuity, emblem size, and retention under circle and squircle masks. `LauncherAssetTest` renders the packaged adaptive drawable through Android and checks its rim for the former black border. Phone launchers supply their own masks.
 

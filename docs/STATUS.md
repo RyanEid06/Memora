@@ -1,10 +1,10 @@
-# Memora status — 4 November 2026
+# Memora status — 8 November 2026
 
-## Maintenance source 1.0.4 / code7
+## Maintenance source 1.0.5 / code8
 
-The owner limited this pass to a clean public repository and an official signed APK. Repository: [RyanEid06/memora](https://github.com/RyanEid06/memora). Changes cover the owner-requested full-bleed launcher icon, current repository/project metadata, secret-file exclusions, signing path portability and verified Gradle distribution pinning. Android behavior, application ID, permanent certificate and Room schema9 remain unchanged. Backend persistence/deployment and new physical-device acceptance are outside this pass.
+Version 1.0.5 applies the owner-approved dark navy and gold launcher artwork and uses the existing application ID, permanent certificate, Room schema 9, and encrypted backup format. It includes the App Lock, reminders, and Library changes from the privately delivered 1.0.4 build. Repository: [RyanEid06/memora](https://github.com/RyanEid06/memora).
 
-Use [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest) for published APKs/checksums. The supported signing script requires all five CI jobs to succeed on the exact source before producing official artifacts. Owner-local signed output metadata is recorded in ignored `artifacts/release-v1/official-release.json`; the root checkpoint links current validation evidence.
+Use [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest) for published APKs and checksums. The signing script requires all five CI jobs to succeed on the exact source before producing official artifacts. The [root checkpoint](../CODEX_WORKLOG.md) records local validation.
 
 ## Historical official 1.0.3 / code6
 
