@@ -2,7 +2,7 @@
 
 ## Maintenance source 1.0.6 / code 9
 
-Version 1.0.6 applies the corrected owner-approved glossy launcher artwork for private testing. It uses the existing application ID, permanent certificate, Room schema 9, and encrypted backup format and includes the App Lock, reminders, and Library changes from the privately delivered 1.0.4 build. Repository: [RyanEid06/memora](https://github.com/RyanEid06/memora).
+Version 1.0.6 applies the corrected owner-approved glossy launcher artwork. It uses the existing application ID, permanent certificate, Room schema 9, and encrypted backup format and includes the App Lock, reminders, and Library changes from the privately delivered 1.0.4 build. Repository: [RyanEid06/memora](https://github.com/RyanEid06/memora).
 
 Use [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest) for published APKs and checksums. The signing script requires all five CI jobs to succeed on the exact source before producing official artifacts. The [root checkpoint](../CODEX_WORKLOG.md) records local validation.
 

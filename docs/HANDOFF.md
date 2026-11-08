@@ -1,6 +1,6 @@
 # Memora owner handoff
 
-Current source is **1.0.6 / code 9**, prepared for private testing. Download published APKs and checksums from [the latest release](https://github.com/RyanEid06/memora/releases/latest). The records below describe the historical 1.0.3 handoff.
+Current source is **1.0.6 / code 9**. Download published APKs and checksums from [the latest release](https://github.com/RyanEid06/memora/releases/latest). The records below describe the historical 1.0.3 handoff.
 
 [Official release and both APK variants](https://github.com/RyanEid06/memora/releases/tag/v1.0.3). Requires Android10 or newer. Use ARM64 for ARM64 phones; the universal APK contains arm64-v8a/armeabi-v7a/x86/x86_64. Debug/optimizedCheck APKs use a different certificate.
 

@@ -1,6 +1,6 @@
 # Memora V1 permanent release procedure and audit
 
-Application ID is permanently `com.personallibrary.app`. Current source is **1.0.6 / versionCode 9**, prepared for private testing. See [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest) for the latest published build. Signing and publication require exact-source CI. The existing owner key is the only permitted official signing identity. See [SIGNING_IDENTITY](SIGNING_IDENTITY.md). Future updates use the same package and certificate with a larger versionCode.
+Application ID is permanently `com.personallibrary.app`. Current source is **1.0.6 / versionCode 9**. See [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest) for the latest published build. Signing and publication require exact-source CI. The existing owner key is the only permitted official signing identity. See [SIGNING_IDENTITY](SIGNING_IDENTITY.md). Future updates use the same package and certificate with a larger versionCode.
 
 ## Historical official release — v1.0.3
 
