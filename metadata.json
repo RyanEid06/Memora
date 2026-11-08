@@ -1,6 +1,0 @@
-{
-  "name": "Memora",
-  "description": "Private Android library for notes, links, media and documents with offline search, OCR, encrypted backups and optional AI-assisted discovery",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

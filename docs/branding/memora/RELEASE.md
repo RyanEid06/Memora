@@ -13,11 +13,11 @@ Application ID is permanently `com.personallibrary.app`. Current source is **1.0
 
 Both official files are byte-identical to the independently verified private candidate. Permanent certificate/package/version, ABI/OCR, ZIP alignment and ARM64 ELF16KiB checks passed. Files, checksums and frozen pair receipts are retained in ignored `artifacts/release-v1.0.3-official/`; only ARM64 and its guide are delivered on Desktop. The release includes both APKs and SHA256SUMS.txt. Later documentation cleanup does not change the APK/tag source or require rebuilding the certified bytes.
 
-Hosted Debug and optimized instrumentation each finished 111 tests:99PASS/12explicit environment or opt-in skips/0FAIL. Separate local optimized100/100 has zero skips; local Debug101 passing unique executions span groups/reruns. Physical update/data retention, OEM/media/speech/accessibility, restore and realistic large-library acceptance remain pending. Backend rollout/live-provider acceptance is separate; F36/F37 server persistence remains deferred. See [current status](../../STATUS.md) and [owner handoff](../../HANDOFF.md).
+Hosted Debug and optimized instrumentation each finished 111 tests:99PASS/12explicit environment or opt-in skips/0FAIL. Separate local optimized100/100 has zero skips; local Debug101 passing unique executions span groups/reruns. Physical update/data retention, OEM/media/speech/accessibility, restore and realistic large-library acceptance remain pending. Backend rollout/live-provider acceptance is separate; F36/F37 server persistence remains deferred. See the [installation and device verification guide](../../HANDOFF.md).
 
 ## Historical official release — v1.0.1
 
-[V1.0.1](https://github.com/RyanEid06/memora/releases/tag/v1.0.1) uses the same permanent certificate and package, version1.0.1/code3. APK source `5ac62b4ccbcdacdf6144827c8f09a3cfdeca5125` passed all five jobs in [CI39389151689](https://github.com/RyanEid06/memora/actions/runs/39389151689) before authorized main integration and signing. The later annotated release-tag commit changes documentation only and must pass all five jobs independently before publication; the already verified code3 APKs are reused without resigning that documentation commit. Full phase evidence and hashes are in [the worklog](../../CODEX_V1_0_1_WORKLOG.md).
+[V1.0.1](https://github.com/RyanEid06/memora/releases/tag/v1.0.1) uses the same permanent certificate and package, version1.0.1/code3. APK source `5ac62b4ccbcdacdf6144827c8f09a3cfdeca5125` passed all five jobs in [CI39389151689](https://github.com/RyanEid06/memora/actions/runs/39389151689) before authorized main integration and signing. The later annotated release-tag commit contains a documentation update; the published APKs retain the original verified build. Full phase evidence and hashes are in the [archived worklog](https://github.com/RyanEid06/memora/blob/v1.0.6/docs/CODEX_V1_0_1_WORKLOG.md).
 
 | APK | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -63,8 +63,6 @@ Setup validates the existing canonical key's file hash, private certificate and 
 Only this Windows user on this PC can decrypt the DPAPI payload. No AES key, portable/plaintext fallback, permanent environment variable or repository credential is created. Setup uses existing process variables silently; if absent, it offers a hidden prompt only during setup. An absent PKCS12 key password uses the store password. After successful setup, the temporary password environment variables are removed from that PowerShell process. Setup never builds an APK. An intentional credential reset uses `-Replace`. Protect the original keystore/password independently: a DPAPI file is not a portable key backup. [Microsoft DPAPI/CLIXML behavior](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/export-clixml).
 
 ## One-command owner-local release
-
-For the separate V1.0.1 hardening-branch QA candidate, use the explicitly gated [candidate build command](../../QA_CANDIDATE_BUILD.md). It preserves the permanent signing identity and writes candidate artifacts and provenance separately from official release outputs.
 
 After required exact-source CI jobs pass, future releases need only:
 

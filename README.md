@@ -1,55 +1,28 @@
 # Memora
 
-Your personal library, always within reach. Save notes, links, photos, videos, voice notes, documents and shared files in one native Android app. Keep originals on your phone, find them offline, and optionally use AI to discover connections in what you save.
+Memora is a personal library for Android. Save notes, links, photos, videos, voice notes, PDFs, and other documents in one place, and find them again offline.
 
-## What you can do
+**Final source version: Memora 1.0.6 (version code 9).** Requires Android 10 or later.
 
-- **Capture and organize:** receive Android shares, import WhatsApp exports, browse lists or grids, and organize items into folders, Favorites and Inbox.
-- **Find what matters:** paged local text search, bundled Latin OCR, PDF extraction, date/type filters and original-file previews.
-- **Explore with AI:** optional semantic retrieval and source-linked answers, with pause, exclusions, network controls and clearly labeled fallback results.
-- **Keep control:** original files stay local, App Lock protects access, Trash supports recovery, and passphrase-encrypted backups support moving your library.
-- **Make it yours:** Light, Dark and System appearance, adaptive layouts, reminders and editable English voice input.
+[**Download Memora APKs from GitHub Releases**](https://github.com/RyanEid06/memora/releases/latest)
 
-## Releases
+Use ARM64 for an ARM64 phone. To update an existing officially signed installation, export an encrypted backup and install the APK over Memora. See the [installation guide](docs/HANDOFF.md).
 
-Current source is **1.0.6 / versionCode 9**. The launcher icon uses the approved glossy artwork with a full-bleed navy background and gold corner highlights. The source includes the 1.0.4 maintenance changes for App Lock, protected reminders, and Library controls. New exports suggest `Memora_Backup_<timestamp>.plb` and existing `.plb` backups still restore.
+## Features
 
-Download the latest published, permanently signed ARM64 or universal APK and its SHA-256 checksum from [GitHub Releases](https://github.com/RyanEid06/memora/releases/latest).
+- Save from the Android share menu and import WhatsApp exports.
+- Organize your library with folders, Favorites, Inbox, and Trash.
+- Search locally using text, filters, bundled Latin OCR, and PDF extraction.
+- Use App Lock, reminders, editable voice input, and Light, Dark, or System appearance.
+- Export and restore passphrase-encrypted `.plb` backups.
+- Optionally use AI to find related content and get answers linked to library items.
 
-The official APK uses the existing application ID and permanent signing identity so earlier official installations can update in place.
+## Offline and privacy
 
-Version 1.0.3 adds bounded indexing and AI retrieval, Room schema9, paged search, GIF animation under Video, voice recovery, adaptive layouts and privacy-safe diagnostics. It retains `com.personallibrary.app`, the permanent signing identity and existing supported database/backup upgrade code; physical migration and restore acceptance remain pending. A higher version code supports updating an existing permanently signed installation in place. **Back up first; stop if Android requests uninstall or reports a signature conflict.** Verification-only debug/optimizedCheck APKs use a different certificate.
+Your library and original files are stored on your device. Browsing, local search, and bundled OCR work offline. Optional AI uses the configured backend and provider to process eligible content. You can pause analysis or exclude items and folders. [Backend behavior and setup](server/README.md)
 
-[Current status](docs/STATUS.md) · [Installation and owner testing](docs/HANDOFF.md) · [Documentation](docs/README.md) · [Working checkpoint](CODEX_WORKLOG.md)
+## Tech stack
 
-## Privacy and AI
+The Android app uses Kotlin, Jetpack Compose, and Room. Tink provides backup encryption. The optional AI backend uses Node.js and TypeScript with Gemini.
 
-Local library browsing, text search and bundled OCR work offline. Optional AI sends bounded representations of eligible content to the configured backend/provider; pause analysis or exclude items and folders to control future processing. Provider credentials belong only on the server. App Lock and encrypted backups protect different parts of the workflow; keep your backup passphrase safe.
-
-The backend has no content-library database. Runtime revocations, consumed nonces and rate budgets remain process-local; restart and replica persistence are deferred findings F36/F37. Environment-configured revocations reload on restart. Backend persistence and deployment changes are outside this maintenance release; local tests do not establish live-provider acceptance. See [backend setup and limits](server/README.md).
-
-## Build and verify
-
-Use JDK21, Android platform36.1 and build-tools36.0.0 with the checked-in Gradle wrapper. Minimum Android10/API29; target36. Windows local setup uses the existing `.tools/android-sdk`; see [project instructions](AGENTS.md).
-
-```powershell
-.\gradlew.bat -PcoreOnly=true :core:test --no-daemon --no-configuration-cache --console=plain
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --no-configuration-cache --console=plain
-# With an explicitly selected emulator:
-.\gradlew.bat :app:connectedDebugAndroidTest --no-configuration-cache
-.\gradlew.bat :app:connectedOptimizedCheckAndroidTest -PmemoraOptimizedTests=true --no-configuration-cache
-```
-
-From `server/`: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`.
-
-[GitHub Actions](https://github.com/RyanEid06/memora/actions/workflows/android.yml) checks core, Android, server, emulator and signing-workflow behavior. Fake-provider CI and emulator results remain separate from physical-phone, OEM, accessibility and live-provider acceptance. Signing requires all five jobs to pass on the exact committed source; see the [permanent release procedure](docs/branding/memora/RELEASE.md).
-
-## Project structure
-
-- `app/` — Kotlin/Compose Android app, Room storage, local indexing and native tests.
-- `core/` — shared contracts and encrypted backup engine.
-- `server/` — authenticated TypeScript AI proxy and synthetic provider tests.
-- `docs/` — current procedures, active remediation and retained release evidence.
-- `qa-reports/` — historical acceptance evidence; its original results are preserved.
-
-[Original artwork and palette](docs/branding/memora/README.md) · [Backup format](docs/BACKUP_FORMAT.md) · [Permanent release procedure](docs/branding/memora/RELEASE.md)
+[Documentation](docs/README.md) · [Backup format](docs/BACKUP_FORMAT.md) · [Release signing procedure](docs/branding/memora/RELEASE.md)
