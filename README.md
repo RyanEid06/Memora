@@ -2,9 +2,9 @@
 
 Memora is a personal library for Android. Save notes, links, photos, videos, voice notes, PDFs, and other documents in one place, and find them again offline.
 
-**Final source version: Memora 1.0.6 (version code 9).** Requires Android 10 or later.
+**Latest release: Memora 1.0.6 (version code 9).** Requires Android 10 or later.
 
-[**Download Memora APKs from GitHub Releases**](https://github.com/RyanEid06/memora/releases/latest)
+[**Download the ARM64 APK**](https://github.com/RyanEid06/Memora/releases/download/v1.0.6/Memora-v1.0.6-arm64-official.apk) · [Universal APK](https://github.com/RyanEid06/Memora/releases/download/v1.0.6/Memora-v1.0.6-universal.apk) · [Release notes and SHA-256 checksums](https://github.com/RyanEid06/Memora/releases/latest)
 
 Use ARM64 for an ARM64 phone. To update an existing officially signed installation, export an encrypted backup and install the APK over Memora. See the [installation guide](docs/HANDOFF.md).
 

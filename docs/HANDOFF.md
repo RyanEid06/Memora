@@ -1,6 +1,6 @@
 # Installing and updating Memora
 
-Download the published APKs and their SHA-256 checksums from the [latest release](https://github.com/RyanEid06/memora/releases/latest). Memora requires Android 10 or later. The ARM64 APK supports ARM64 phones. The universal APK supports ARM64, ARMv7, x86, and x86-64.
+Download Memora **1.0.6 (version code 9)** and its SHA-256 checksums from the [latest release](https://github.com/RyanEid06/Memora/releases/latest). Memora requires Android 10 or later. The ARM64 APK supports ARM64 phones. The universal APK supports ARM64, ARMv7, x86, and x86-64.
 
 ## Update installation
 
